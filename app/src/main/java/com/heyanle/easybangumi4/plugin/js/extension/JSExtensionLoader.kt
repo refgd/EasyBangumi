@@ -19,6 +19,7 @@ import java.io.File
 class JSExtensionLoader(
     private val file: File,
     private val jsRuntime: JSRuntimeProvider,
+    private val realPath: String = "",
 ): ExtensionLoader {
 
     companion object {
@@ -30,6 +31,8 @@ class JSExtensionLoader(
         const val JS_SOURCE_TAG_VERSION_CODE = "versionCode"
         const val JS_SOURCE_TAG_LIB_VERSION = "libVersion"
         const val JS_SOURCE_TAG_COVER = "cover"
+        const val JS_SOURCE_HAS_PREF = "hasPreference"
+        const val JS_SOURCE_HAS_SEARCH = "hasSearch"
 
     }
 
@@ -45,39 +48,46 @@ class JSExtensionLoader(
             return null
         }
 
-
-
         val map = HashMap<String, String>()
 
         file.reader().buffered().use {
-            var line = it.readLine()
-            while(line != null) {
-                if (line.isEmpty() || !line.startsWith("//")){
-                    break
-                }
-                var firstAtIndex = -1
-                var spacerAfterAtIndex = -1
-
-                line.forEachIndexed { index, c ->
-                    if (firstAtIndex == -1 && c == '@'){
-                        firstAtIndex = index
-                    }
-                    if (firstAtIndex != -1 && spacerAfterAtIndex == -1 && c == ' '){
-                        spacerAfterAtIndex = index
-                    }
-                    if (firstAtIndex != -1 && spacerAfterAtIndex != -1){
-                        return@forEachIndexed
-                    }
-                }
-
-                if (firstAtIndex == -1 || spacerAfterAtIndex == -1){
+            while(true) {
+                val line = it.readLine() ?: break
+                if (line.isEmpty()){
                     continue
                 }
 
-                val key = line.substring(firstAtIndex + 1, spacerAfterAtIndex)
-                val value = line.substring(spacerAfterAtIndex + 1)
-                map[key] = value
-                line = it.readLine()
+                if (line.startsWith("//")){
+                    var firstAtIndex = -1
+                    var spacerAfterAtIndex = -1
+
+                    line.forEachIndexed { index, c ->
+                        if (firstAtIndex == -1 && c == '@'){
+                            firstAtIndex = index
+                        }
+                        if (firstAtIndex != -1 && spacerAfterAtIndex == -1 && c == ' '){
+                            spacerAfterAtIndex = index
+                        }
+                        if (firstAtIndex != -1 && spacerAfterAtIndex != -1){
+                            return@forEachIndexed
+                        }
+                    }
+
+                    if (firstAtIndex == -1 || spacerAfterAtIndex == -1){
+                        continue
+                    }
+
+                    val key = line.substring(firstAtIndex + 1, spacerAfterAtIndex)
+                    val value = line.substring(spacerAfterAtIndex + 1)
+                    map[key] = value
+                }else{
+                    if (line.contains("function PreferenceComponent_getPreference(")) {
+                        map[JS_SOURCE_HAS_PREF] = "1"
+                    }
+                    if (line.contains("function SearchComponent_search(")) {
+                        map[JS_SOURCE_HAS_SEARCH] = "1"
+                    }
+                }
             }
         }
 
@@ -86,33 +96,20 @@ class JSExtensionLoader(
         val label = map[JS_SOURCE_TAG_LABEL] ?: ""
         val key = map[JS_SOURCE_TAG_KEY] ?: ""
         val versionName = map[JS_SOURCE_TAG_VERSION_NAME] ?: ""
-        val versionCode = map[JS_SOURCE_TAG_VERSION_CODE]?.toLongOrNull() ?: -1
+        val versionCode = map[JS_SOURCE_TAG_VERSION_CODE]?.toLongOrNull() ?: -1L
         val libVersion = map[JS_SOURCE_TAG_LIB_VERSION]?.toIntOrNull() ?: -1
+        val hasPref = map[JS_SOURCE_HAS_PREF]?.toIntOrNull() ?: 0
+        val hasSearch = map[JS_SOURCE_HAS_SEARCH]?.toIntOrNull() ?: 0
+        map["sourcePath"] = if (realPath.isNotEmpty()) realPath else file.absolutePath
 
-
-        if (SourceCrashController.needBlock){
-            return ExtensionInfo.InstallError(
-                key = key,
-                label = label,
-                pkgName = key,
-                versionName = versionName,
-                versionCode = versionCode,
-                libVersion = libVersion,
-                readme = "",
-                icon = Icons.Filled.Javascript,
-                errMsg = "安全模式阻断",
-                loadType = ExtensionInfo.TYPE_JS_FILE,
-                sourcePath = file.absolutePath,
-                publicPath = file.absolutePath,
-                folderPath = file.absolutePath,
-                exception = null
-            )
-        }
-
-        val libErrorMsg = if (libVersion == -1) {
+        val libErrorMsg = if (SourceCrashController.needBlock) {
+            "安全模式阻断"
+        } else if (libVersion == -1 || versionCode == -1L
+            || key.isBlank() || label.isBlank() || versionName.isBlank()
+        ) {
             "元数据错误"
         } else if (libVersion > AbsExtensionLoader.LIB_VERSION_MAX) {
-            "纯纯看番版本过低"
+            "纯纯看看版本过低"
         } else if (libVersion < AbsExtensionLoader.LIB_VERSION_MIN) {
             "插件版本过低"
         } else {
@@ -131,48 +128,32 @@ class JSExtensionLoader(
                 icon = Icons.Filled.Javascript,
                 errMsg = libErrorMsg,
                 loadType = ExtensionInfo.TYPE_JS_FILE,
-                sourcePath = file.absolutePath,
-                publicPath = file.absolutePath,
-                folderPath = file.absolutePath,
+                hasPref = hasPref,
+                hasSearch = hasSearch,
+                sourcePath = map["sourcePath"] ?: "",
+                publicPath = map["sourcePath"] ?: "",
+                folderPath = map["sourcePath"] ?: "",
                 exception = null
             )
         }
 
-
-
-
-        val errorInfo = ExtensionInfo.InstallError(
-            key = key,
-            label = map[JS_SOURCE_TAG_LABEL] ?: "",
-            pkgName = map[JS_SOURCE_TAG_KEY] ?: "",
-            versionName = map[JS_SOURCE_TAG_VERSION_NAME] ?: "",
-            versionCode = map[JS_SOURCE_TAG_VERSION_CODE]?.toLongOrNull() ?: -1,
-            libVersion = map[JS_SOURCE_TAG_LIB_VERSION]?.toIntOrNull() ?: -1,
-            readme = "",
-            icon = Icons.Filled.Javascript,
-            loadType = ExtensionInfo.TYPE_JS_FILE,
-            sourcePath = file.absolutePath,
-            publicPath = file.absolutePath,
-            folderPath = file.absolutePath,
-            exception = null,
-            errMsg =  "元数据错误"
-        )
-
         return ExtensionInfo.Installed(
             key = key,
-            label = map[JS_SOURCE_TAG_LABEL] ?: return errorInfo,
-            pkgName = map[JS_SOURCE_TAG_KEY] ?: return errorInfo,
-            versionName = map[JS_SOURCE_TAG_VERSION_NAME] ?: return errorInfo,
-            versionCode = map[JS_SOURCE_TAG_VERSION_CODE]?.toLongOrNull() ?: return errorInfo,
-            libVersion = map[JS_SOURCE_TAG_LIB_VERSION]?.toIntOrNull() ?: return errorInfo,
+            label = label,
+            pkgName = key,
+            versionName = versionName,
+            versionCode = versionCode,
+            libVersion = libVersion,
             readme = "",
             icon = Icons.Filled.Javascript,
             sources = listOf(JsSource(map, file, jsScope)) ,
             resources = null,
             loadType = ExtensionInfo.TYPE_JS_FILE,
-            sourcePath = file.absolutePath,
-            publicPath = file.absolutePath,
-            folderPath = file.absolutePath,
+            hasPref = hasPref,
+            hasSearch = hasSearch,
+            sourcePath = map["sourcePath"] ?: "",
+            publicPath = map["sourcePath"] ?: "",
+            folderPath = map["sourcePath"] ?: "",
             extension = null,
         )
 

@@ -24,8 +24,6 @@ import androidx.media3.transformer.Transformer
 import com.heyanle.easybangumi4.exo.ClippingConfigMediaSourceFactory
 import com.heyanle.easybangumi4.utils.logi
 import com.heyanle.easybangumi4.utils.safeResume
-import com.heyanle.easybangumi4.utils.stringRes
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.File
 import kotlin.coroutines.Continuation

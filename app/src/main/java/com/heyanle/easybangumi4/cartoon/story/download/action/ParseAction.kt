@@ -1,19 +1,12 @@
 package com.heyanle.easybangumi4.cartoon.story.download.action
 
-import com.heyanle.easybangumi4.R
 import com.heyanle.easybangumi4.cartoon.entity.CartoonDownloadReq
 import com.heyanle.easybangumi4.cartoon.story.download.runtime.CartoonDownloadRuntime
 import com.heyanle.easybangumi4.case.SourceStateCase
-import com.heyanle.easybangumi4.utils.CoroutineProvider
 import com.heyanle.easybangumi4.utils.logi
 import com.heyanle.easybangumi4.utils.stringRes
-import com.heyanle.inject.api.get
-import com.heyanle.inject.core.Inject
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.MainScope
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**

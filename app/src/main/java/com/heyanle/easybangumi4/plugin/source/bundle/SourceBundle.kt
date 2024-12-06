@@ -1,17 +1,14 @@
 package com.heyanle.easybangumi4.plugin.source.bundle
 
+import com.heyanle.easybangumi4.plugin.api.IconSource
+import com.heyanle.easybangumi4.plugin.api.Source
+import com.heyanle.easybangumi4.plugin.api.component.detailed.DetailedComponent
+import com.heyanle.easybangumi4.plugin.api.component.page.PageComponent
+import com.heyanle.easybangumi4.plugin.api.component.play.PlayComponent
+import com.heyanle.easybangumi4.plugin.api.component.preference.PreferenceComponent
+import com.heyanle.easybangumi4.plugin.api.component.search.SearchComponent
 import com.heyanle.easybangumi4.plugin.source.ConfigSource
 import com.heyanle.easybangumi4.plugin.source.SourceInfo
-import com.heyanle.easybangumi4.utils.loge
-import com.heyanle.easybangumi4.source_api.IconSource
-import com.heyanle.easybangumi4.source_api.Source
-import com.heyanle.easybangumi4.source_api.component.Component
-import com.heyanle.easybangumi4.source_api.component.detailed.DetailedComponent
-import com.heyanle.easybangumi4.source_api.component.page.PageComponent
-import com.heyanle.easybangumi4.source_api.component.play.PlayComponent
-import com.heyanle.easybangumi4.source_api.component.preference.PreferenceComponent
-import com.heyanle.easybangumi4.source_api.component.search.SearchComponent
-import com.heyanle.easybangumi4.source_api.component.update.UpdateComponent
 
 
 /**
@@ -26,20 +23,10 @@ class SourceBundle(
         val NONE = SourceBundle(emptyList())
     }
 
-
     private val sourceMap = linkedMapOf<String, SourceInfo.Loaded>()
-
-    private val preferenceMap = linkedMapOf<String, PreferenceComponent>()
 
     private val iconMap = linkedMapOf<String, IconSource>()
 
-    private val playMap = linkedMapOf<String, PlayComponent>()
-
-    private val pageMap = linkedMapOf<String, PageComponent>()
-
-    private val searchMap = linkedMapOf<String, SearchComponent>()
-
-    private val detailedMap = linkedMapOf<String, DetailedComponent>()
 
     //private val migrateMap = linkedMapOf<String, MiSou>()
 
@@ -61,54 +48,28 @@ class SourceBundle(
             || sourceMap[source.key]!!.source.versionCode < source.versionCode
         ) {
             sourceMap[source.key] = sourceInfo
-
-
-
             iconMap.remove(source.key)
-            playMap.remove(source.key)
-            pageMap.remove(source.key)
-            searchMap.remove(source.key)
-            detailedMap.remove(source.key)
-            preferenceMap.remove(source.key)
 
             if (source is IconSource) {
                 iconMap[source.key] = source
             }
-
-
-            val pageComponent = sourceInfo.componentBundle.getComponentProxy<PageComponent>()
-            val detailedComponent = sourceInfo.componentBundle.getComponentProxy<DetailedComponent>()
-            val playComponent = sourceInfo.componentBundle.getComponentProxy<PlayComponent>()
-            val preferenceComponent = sourceInfo.componentBundle.getComponentProxy<PreferenceComponent>()
-            val searchComponent = sourceInfo.componentBundle.getComponentProxy<SearchComponent>()
-            val updateComponent = sourceInfo.componentBundle.getComponentProxy<UpdateComponent>()
-
-            if (pageComponent != null) {
-                pageMap[source.key] = pageComponent
-            }
-
-            if (detailedComponent != null) {
-                detailedMap[source.key] = detailedComponent
-            }
-
-            if (playComponent != null) {
-                playMap[source.key] = playComponent
-            }
-
-            if (preferenceComponent != null) {
-                preferenceMap[source.key] = preferenceComponent
-            }
-
-            if (searchComponent != null) {
-                searchMap[source.key] = searchComponent
-            }
-
         }
     }
 
 
-    fun sourceInfo(key: String) : SourceInfo? {
+    fun sourceInfo(key: String) : SourceInfo.Loaded? {
         return sourceMap[key]
+    }
+
+    fun sourceInfos(): List<SourceInfo.Loaded> {
+        return sourceMap.toList().map {
+            it.second
+        }
+    }
+
+    fun searchAbles(): List<SourceInfo.Loaded> {
+        return sourceMap.filter { it.value.source.hasSearch == 1 }
+            .map { it.value }
     }
 
     fun sources(): List<Source> {
@@ -121,42 +82,28 @@ class SourceBundle(
         return sourceMap[key]?.source
     }
 
-    fun page(key: String): PageComponent? {
-        return pageMap[key]
+    suspend fun page(key: String): PageComponent? {
+        return sourceMap[key]?.componentBundle?.getComponentProxy<PageComponent>()
     }
 
-    fun pages(): List<PageComponent> {
-        return pageMap.toList().map {
-            it.second
-        }
+    suspend fun search(key: String): SearchComponent? {
+        return sourceMap[key]?.componentBundle?.getComponentProxy<SearchComponent>()
     }
 
-    fun search(key: String): SearchComponent? {
-        return searchMap[key]
-    }
-
-    fun searches(): List<SearchComponent> {
-        return searchMap.toList().map {
-            it.second
-        }
-    }
-
-    fun preference(key: String): PreferenceComponent? {
-        return preferenceMap[key]
+    suspend fun preference(key: String): PreferenceComponent? {
+        return sourceMap[key]?.componentBundle?.getComponentProxy<PreferenceComponent>()
     }
 
     fun icon(key: String): IconSource? {
         return iconMap[key]
     }
 
-    fun play(key: String): PlayComponent? {
-        key.loge("SourceBundle")
-        return playMap[key]
+    suspend fun play(key: String): PlayComponent? {
+        return sourceMap[key]?.componentBundle?.getComponentProxy<PlayComponent>()
     }
 
-    fun detailed(key: String): DetailedComponent? {
-        key.loge("SourceBundle")
-        return detailedMap[key]
+    suspend fun detailed(key: String): DetailedComponent? {
+        return sourceMap[key]?.componentBundle?.getComponentProxy<DetailedComponent>()
     }
 
     fun empty(): Boolean {

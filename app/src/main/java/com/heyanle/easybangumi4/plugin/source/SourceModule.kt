@@ -2,22 +2,20 @@ package com.heyanle.easybangumi4.plugin.source
 
 import android.app.Application
 import com.heyanle.easybangumi4.base.hekv.HeKV
+import com.heyanle.easybangumi4.plugin.api.utils.api.CaptchaHelper
+import com.heyanle.easybangumi4.plugin.api.utils.api.NetworkHelper
+import com.heyanle.easybangumi4.plugin.api.utils.api.OkhttpHelper
+import com.heyanle.easybangumi4.plugin.api.utils.api.PreferenceHelper
+import com.heyanle.easybangumi4.plugin.api.utils.api.StringHelper
+import com.heyanle.easybangumi4.plugin.api.utils.api.WebViewHelper
+import com.heyanle.easybangumi4.plugin.api.utils.api.WebViewHelperV2
 import com.heyanle.easybangumi4.plugin.source.utils.CaptchaHelperImpl
-import com.heyanle.easybangumi4.plugin.source.utils.NativeHelperImpl
 import com.heyanle.easybangumi4.plugin.source.utils.PreferenceHelperImpl
 import com.heyanle.easybangumi4.plugin.source.utils.StringHelperImpl
 import com.heyanle.easybangumi4.plugin.source.utils.network.NetworkHelperImpl
 import com.heyanle.easybangumi4.plugin.source.utils.network.OkhttpHelperImpl
 import com.heyanle.easybangumi4.plugin.source.utils.network.WebViewHelperImpl
 import com.heyanle.easybangumi4.plugin.source.utils.network.WebViewHelperV2Impl
-
-import com.heyanle.easybangumi4.source_api.utils.api.CaptchaHelper
-import com.heyanle.easybangumi4.source_api.utils.api.NetworkHelper
-import com.heyanle.easybangumi4.source_api.utils.api.OkhttpHelper
-import com.heyanle.easybangumi4.source_api.utils.api.PreferenceHelper
-import com.heyanle.easybangumi4.source_api.utils.api.StringHelper
-import com.heyanle.easybangumi4.source_api.utils.api.WebViewHelper
-import com.heyanle.easybangumi4.source_api.utils.api.WebViewHelperV2
 import com.heyanle.easybangumi4.utils.getFilePath
 import com.heyanle.inject.api.InjectModule
 import com.heyanle.inject.api.InjectScope
@@ -33,10 +31,6 @@ class SourceModule(
 ) : InjectModule {
 
     override fun InjectScope.registerInjectables() {
-
-        addSingletonFactory {
-            NativeHelperImpl(application)
-        }
 
         addSingletonFactory {
             SourceController(get(), get(), get())

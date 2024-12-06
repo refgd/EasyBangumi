@@ -1,6 +1,5 @@
 package com.heyanle.easybangumi4.ui.common.page.listgroup
 
-import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -10,7 +9,7 @@ import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewModelScope
 import com.heyanle.easy_i18n.R
-import com.heyanle.easybangumi4.source_api.component.page.SourcePage
+import com.heyanle.easybangumi4.plugin.api.component.page.SourcePage
 import com.heyanle.easybangumi4.utils.stringRes
 import kotlinx.coroutines.launch
 

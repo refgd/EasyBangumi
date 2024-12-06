@@ -8,11 +8,10 @@ import com.heyanle.easybangumi4.cartoon.entity.CartoonTag
 import com.heyanle.easybangumi4.cartoon.entity.PlayLineWrapper
 import com.heyanle.easybangumi4.cartoon.repository.db.dao.CartoonInfoDao
 import com.heyanle.easybangumi4.cartoon.star.CartoonStarController
-import com.heyanle.easybangumi4.cartoon.story.CartoonStoryController
 import com.heyanle.easybangumi4.case.CartoonInfoCase
+import com.heyanle.easybangumi4.plugin.api.entity.CartoonSummary
+import com.heyanle.easybangumi4.plugin.api.entity.Episode
 import com.heyanle.easybangumi4.setting.SettingPreferences
-import com.heyanle.easybangumi4.source_api.entity.CartoonSummary
-import com.heyanle.easybangumi4.source_api.entity.Episode
 import com.heyanle.easybangumi4.ui.common.proc.SortState
 import com.heyanle.inject.core.Inject
 import kotlinx.coroutines.Job

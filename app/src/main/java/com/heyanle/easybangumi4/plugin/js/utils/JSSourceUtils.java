@@ -1,9 +1,7 @@
 package com.heyanle.easybangumi4.plugin.js.utils;
 
 
-import com.heyanle.easybangumi4.source_api.utils.core.SourceUtils;
-
-import kotlin.text.Regex;
+import com.heyanle.easybangumi4.plugin.api.utils.core.SourceUtils;
 
 /**
  * Created by HeYanLe on 2024/11/3 20:54.

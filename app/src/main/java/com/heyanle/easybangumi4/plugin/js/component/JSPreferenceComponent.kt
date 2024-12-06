@@ -1,15 +1,14 @@
 package com.heyanle.easybangumi4.plugin.js.component
 
+import com.heyanle.easybangumi4.plugin.api.ParserException
+import com.heyanle.easybangumi4.plugin.api.component.ComponentWrapper
+import com.heyanle.easybangumi4.plugin.api.component.preference.PreferenceComponent
+import com.heyanle.easybangumi4.plugin.api.component.preference.SourcePreference
 import com.heyanle.easybangumi4.plugin.js.runtime.JSScope
 import com.heyanle.easybangumi4.plugin.js.runtime.JSScopeException
 import com.heyanle.easybangumi4.plugin.js.utils.JSFunction
 import com.heyanle.easybangumi4.plugin.js.utils.jsUnwrap
-import com.heyanle.easybangumi4.source_api.ParserException
-import com.heyanle.easybangumi4.source_api.component.ComponentWrapper
-import com.heyanle.easybangumi4.source_api.component.preference.PreferenceComponent
-import com.heyanle.easybangumi4.source_api.component.preference.SourcePreference
 import kotlinx.coroutines.TimeoutCancellationException
-import org.mozilla.javascript.Function
 
 /**
  * Created by heyanle on 2024/7/28.

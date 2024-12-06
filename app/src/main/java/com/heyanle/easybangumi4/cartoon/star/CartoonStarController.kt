@@ -1,7 +1,5 @@
 package com.heyanle.easybangumi4.cartoon.star
 
-import android.content.Intent
-import android.provider.DocumentsContract
 import com.heyanle.easybangumi4.base.json.JsonFileProvider
 import com.heyanle.easybangumi4.base.preferences.android.AndroidPreferenceStore
 import com.heyanle.easybangumi4.cartoon.entity.CartoonInfo
@@ -9,14 +7,12 @@ import com.heyanle.easybangumi4.cartoon.entity.CartoonTag
 import com.heyanle.easybangumi4.cartoon.repository.db.dao.CartoonInfoDao
 import com.heyanle.easybangumi4.ui.common.proc.FilterState
 import com.heyanle.easybangumi4.utils.CoroutineProvider
-import com.heyanle.easybangumi4.utils.toJson
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.stateIn
-import java.io.InputStream
 
 /**
  * Created by heyanle on 2024/7/14.

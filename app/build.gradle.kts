@@ -28,14 +28,22 @@ runCatching {
     // it.printStackTrace()
 }
 
-val packageName = if (release) "com.heyanle.easybangumi4" else "com.heyanle.easybangumi4.debug"
-val labelNameRes = if (release) "@string/app_name" else "纯纯看番 Debug"
+val packageName = if (release) "com.refgd.easybangumi4" else "com.refgd.easybangumi4.debug"
+val labelNameRes = if (release) "@string/app_name" else "纯纯看看"
 
 android {
     namespace =  "com.heyanle.easybangumi4"
     compileSdk = Android.compileSdk
 
     defaultConfig {
+
+        val keystoreFile = project.rootProject.file("local.properties")
+        val properties = Properties()
+        properties.load(keystoreFile.inputStream())
+
+        val encKey = properties.getProperty("enc_key") ?: ""
+
+        buildConfigField("String", "ENC_KEY", "\"${encKey}\"")
 
         applicationId = packageName
         minSdk = Android.minSdk
@@ -247,8 +255,6 @@ dependencies {
     //implementation(project(":lib_signal"))
 
     implementation(libs.zip4j)
-
-    implementation(extension.extension.api)
 
     implementation(libs.bugly)
 

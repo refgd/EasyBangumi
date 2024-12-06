@@ -3,19 +3,19 @@ package com.heyanle.easybangumi4.plugin.source.bundle
 import android.app.Application
 import android.content.Context
 import com.heyanle.easybangumi4.APP
+import com.heyanle.easybangumi4.plugin.api.Source
+import com.heyanle.easybangumi4.plugin.api.component.Component
+import com.heyanle.easybangumi4.plugin.api.component.ComponentWrapper
+import com.heyanle.easybangumi4.plugin.api.component.preference.PreferenceComponent
+import com.heyanle.easybangumi4.plugin.api.component.preference.SourcePreference
+import com.heyanle.easybangumi4.plugin.api.utils.api.CaptchaHelper
+import com.heyanle.easybangumi4.plugin.api.utils.api.NetworkHelper
+import com.heyanle.easybangumi4.plugin.api.utils.api.OkhttpHelper
+import com.heyanle.easybangumi4.plugin.api.utils.api.PreferenceHelper
+import com.heyanle.easybangumi4.plugin.api.utils.api.StringHelper
+import com.heyanle.easybangumi4.plugin.api.utils.api.WebViewHelper
+import com.heyanle.easybangumi4.plugin.api.utils.api.WebViewHelperV2
 import com.heyanle.easybangumi4.plugin.source.SourceException
-import com.heyanle.easybangumi4.source_api.Source
-import com.heyanle.easybangumi4.source_api.component.Component
-import com.heyanle.easybangumi4.source_api.component.ComponentWrapper
-import com.heyanle.easybangumi4.source_api.component.preference.PreferenceComponent
-import com.heyanle.easybangumi4.source_api.component.preference.SourcePreference
-import com.heyanle.easybangumi4.source_api.utils.api.CaptchaHelper
-import com.heyanle.easybangumi4.source_api.utils.api.NetworkHelper
-import com.heyanle.easybangumi4.source_api.utils.api.OkhttpHelper
-import com.heyanle.easybangumi4.source_api.utils.api.PreferenceHelper
-import com.heyanle.easybangumi4.source_api.utils.api.StringHelper
-import com.heyanle.easybangumi4.source_api.utils.api.WebViewHelper
-import com.heyanle.easybangumi4.source_api.utils.api.WebViewHelperV2
 import com.heyanle.inject.api.get
 import com.heyanle.inject.core.Inject
 import java.lang.reflect.Proxy
@@ -193,7 +193,7 @@ class SimpleComponentBundle(
         return bundle[clazz]
     }
 
-    override fun getComponentProxy(clazz: KClass<*>): Any? {
+    override suspend fun getComponentProxy(clazz: KClass<*>): Any? {
         val o = componentProxy[clazz]
         if (o == null){
             val instance = get(clazz) ?: return null
@@ -206,7 +206,7 @@ class SimpleComponentBundle(
         }
         return o
     }
-    inline fun <reified T: Component> getComponentProxy(): T? {
+    suspend inline fun <reified T: Component> getComponentProxy(): T? {
         val obj = getComponentProxy(T::class)
         return obj as? T
     }

@@ -3,15 +3,13 @@ package com.heyanle.easybangumi4.plugin.source
 import com.heyanle.easybangumi4.cartoon.repository.db.dao.CartoonInfoDao
 import com.heyanle.easybangumi4.cartoon.story.local.source.LocalSource
 import com.heyanle.easybangumi4.case.ExtensionCase
+import com.heyanle.easybangumi4.plugin.api.Source
 import com.heyanle.easybangumi4.plugin.extension.ExtensionInfo
 import com.heyanle.easybangumi4.plugin.js.source.JSComponentBundle
 import com.heyanle.easybangumi4.plugin.js.source.JsSource
 import com.heyanle.easybangumi4.plugin.source.bundle.SimpleComponentBundle
 import com.heyanle.easybangumi4.plugin.source.bundle.SourceBundle
-import com.heyanle.easybangumi4.plugin.source.debug.DebugSource
-import com.heyanle.easybangumi4.source_api.Source
 import com.heyanle.easybangumi4.utils.TimeLogUtils
-import com.heyanle.extension_api.NativeSupportedSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -23,7 +21,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.concurrent.Executors
@@ -167,22 +164,7 @@ class SourceController(
     private suspend fun loadSource(source: Source): SourceInfo {
         TimeLogUtils.i("loadSource ${source.key} start")
         return try {
-            if (source is JsSource) {
-                val bundle = JSComponentBundle(source)
-                bundle.init()
-
-            }
-            val bundle =
-                if (source is JsSource) JSComponentBundle(source) else SimpleComponentBundle(source)
-            bundle.init()
-
-//            // 加载 So 咯
-            if (source is NativeSupportedSource) {
-                return SourceInfo.Error(
-                    source,
-                    "NativeSupportedSource 已过时，请在 onInit 中加载 so"
-                )
-            }
+            val bundle = if (source is JsSource) JSComponentBundle(source) else SimpleComponentBundle(source)
 
             SourceInfo.Loaded(source, bundle)
         } catch (e: SourceException) {

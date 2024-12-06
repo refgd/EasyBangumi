@@ -1,13 +1,12 @@
 package com.heyanle.easybangumi4.plugin.js.extension
 
 import com.heyanle.easybangumi4.APP
+import com.heyanle.easybangumi4.BuildConfig
 import com.heyanle.easybangumi4.plugin.extension.ExtensionInfo
 import com.heyanle.easybangumi4.plugin.extension.loader.ExtensionLoader
 import com.heyanle.easybangumi4.plugin.extension.provider.JsExtensionProvider
 import com.heyanle.easybangumi4.plugin.js.runtime.JSRuntimeProvider
-import com.heyanle.easybangumi4.utils.PackageHelper
 import com.heyanle.easybangumi4.utils.aesDecryptTo
-import com.heyanle.easybangumi4.utils.aesEncryptTo
 import com.heyanle.easybangumi4.utils.getInnerCachePath
 import com.heyanle.easybangumi4.utils.getMD5
 import java.io.File
@@ -69,14 +68,14 @@ class JSExtensionCryLoader(
 
 
         // 2. 解密
-        plaintextCacheFile.aesDecryptTo(plaintextFile, PackageHelper.appSignatureMD5, CHUNK_SIZE)
+        plaintextCacheFile.aesDecryptTo(plaintextFile, BuildConfig.ENC_KEY, CHUNK_SIZE)
         if (!plaintextFile.exists() || plaintextFile.length() <= 0) {
             return null
         }
         plaintextFile.deleteOnExit()
 
         // 3. 加载
-        return JSExtensionLoader(plaintextFile, jsRuntime).load()?.let {
+        return JSExtensionLoader(plaintextFile, jsRuntime, file.absolutePath).load()?.let {
             when(it) {
                 is ExtensionInfo.InstallError -> {
                     it.copy(sourcePath = file.absolutePath)

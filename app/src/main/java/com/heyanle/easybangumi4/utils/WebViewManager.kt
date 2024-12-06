@@ -7,7 +7,6 @@ import androidx.annotation.UiThread
 import com.heyanle.easybangumi4.APP
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
-import java.lang.ref.WeakReference
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 

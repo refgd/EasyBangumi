@@ -5,13 +5,8 @@ import com.heyanle.easybangumi4.plugin.source.utils.LightweightGettingWebViewCli
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
-import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.time.withTimeoutOrNull
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import org.apache.commons.text.StringEscapeUtils
 import kotlin.coroutines.resume

@@ -7,12 +7,8 @@ import android.net.Uri
 import android.os.Build
 import android.provider.DocumentsContract
 import androidx.activity.ComponentActivity
-import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.CallSuper
-import com.heyanle.easybangumi4.splash.SplashActivity
-import com.heyanle.easybangumi4.utils.CoroutineProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -20,8 +16,6 @@ import kotlinx.coroutines.launch
 import java.lang.ref.SoftReference
 import java.lang.ref.WeakReference
 import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicReference
-import kotlin.coroutines.suspendCoroutine
 
 /**
  * Created by heyanlin on 2024/5/21.

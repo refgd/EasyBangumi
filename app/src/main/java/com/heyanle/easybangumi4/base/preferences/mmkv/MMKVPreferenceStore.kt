@@ -5,7 +5,6 @@ import com.heyanle.easybangumi4.base.preferences.Preference
 import com.heyanle.easybangumi4.base.preferences.PreferenceStore
 import com.heyanle.easybangumi4.utils.jsonTo
 import com.heyanle.easybangumi4.utils.toJson
-import com.heyanle.okkv2.MMKVStore
 import com.tencent.mmkv.MMKV
 
 /**

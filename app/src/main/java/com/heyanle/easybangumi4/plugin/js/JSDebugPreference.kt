@@ -2,6 +2,7 @@ package com.heyanle.easybangumi4.plugin.js
 
 import android.content.Context
 import android.net.Uri
+import com.heyanle.easybangumi4.BuildConfig
 import com.heyanle.easybangumi4.LauncherBus
 import com.heyanle.easybangumi4.base.preferences.PreferenceStore
 import com.heyanle.easybangumi4.cartoon.story.local.LocalCartoonPreference
@@ -9,7 +10,6 @@ import com.heyanle.easybangumi4.plugin.extension.provider.JsExtensionProvider
 import com.heyanle.easybangumi4.plugin.js.extension.JSExtensionCryLoader
 import com.heyanle.easybangumi4.ui.common.moeDialogAlert
 import com.heyanle.easybangumi4.ui.common.moeSnackBar
-import com.heyanle.easybangumi4.utils.PackageHelper
 import com.heyanle.easybangumi4.utils.aesEncryptTo
 import com.heyanle.easybangumi4.utils.getCachePath
 import com.heyanle.easybangumi4.utils.stringRes
@@ -110,7 +110,7 @@ class JSDebugPreference(
                     }
                 }
 
-                cacheSourceFile.aesEncryptTo(cacheTempFile, PackageHelper.appSignatureMD5, JSExtensionCryLoader.CHUNK_SIZE)
+                cacheSourceFile.aesEncryptTo(cacheTempFile, BuildConfig.ENC_KEY, JSExtensionCryLoader.CHUNK_SIZE)
                 if (!cacheTempFile.exists() || cacheTempFile.length() <= 0L) {
                     throw Throwable("encrypt failed")
                 }

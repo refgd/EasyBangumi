@@ -9,7 +9,6 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.annotation.CallSuper
-import androidx.webkit.WebViewCompat
 import java.io.ByteArrayInputStream
 
 /**

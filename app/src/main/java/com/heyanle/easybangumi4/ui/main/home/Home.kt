@@ -14,7 +14,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.SyncAlt
 import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -181,39 +180,41 @@ fun HomeBottomSheet(
     )
     Divider()
     LazyColumn() {
-        items(animSources.pages()) { page ->
-            ListItem(
-                modifier = Modifier.clickable {
-                    vm.changeSelectionSource(page.source.key)
-                    scope.launch {
-                        onDismissRequest()
-                    }
-                },
-                headlineContent = { Text(text = page.source.label) },
-                leadingContent = {
-                    val icon = remember {
-                        animSources.icon(page.source.key)
-                    }
-                    OkImage(
-                        modifier = Modifier.size(32.dp),
-                        image = icon?.getIconWithAsyncOrDrawable(),
-                        contentDescription = page.source.label
-                    )
-                },
-                trailingContent = {
-                    RadioButton(
-                        selected = state.value.selectionKey == page.source.key,
-                        onClick = {
-                            vm.changeSelectionSource(page.source.key)
-                            scope.launch {
-                                onDismissRequest()
-                            }
-                        })
-                },
-                colors = ListItemDefaults.colors(
-                    containerColor = Color.Transparent
-                ),
-            )
+        items(animSources.sources()) { source ->
+            if(source.versionCode > 0){
+                ListItem(
+                    modifier = Modifier.clickable {
+                        vm.changeSelectionSource(source.key)
+                        scope.launch {
+                            onDismissRequest()
+                        }
+                    },
+                    headlineContent = { Text(text = source.label) },
+                    leadingContent = {
+                        val icon = remember {
+                            animSources.icon(source.key)
+                        }
+                        OkImage(
+                            modifier = Modifier.size(32.dp),
+                            image = icon?.getIconWithAsyncOrDrawable(),
+                            contentDescription = source.label
+                        )
+                    },
+                    trailingContent = {
+                        RadioButton(
+                            selected = state.value.selectionKey == source.key,
+                            onClick = {
+                                vm.changeSelectionSource(source.key)
+                                scope.launch {
+                                    onDismissRequest()
+                                }
+                            })
+                    },
+                    colors = ListItemDefaults.colors(
+                        containerColor = Color.Transparent
+                    ),
+                )
+            }
         }
     }
 }

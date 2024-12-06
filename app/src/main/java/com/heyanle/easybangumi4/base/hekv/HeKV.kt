@@ -3,10 +3,7 @@ package com.heyanle.easybangumi4.base.hekv
 import com.heyanle.easybangumi4.utils.CoroutineProvider
 import com.heyanle.easybangumi4.utils.loge
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.conflate
@@ -18,7 +15,6 @@ import java.io.File
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.util.concurrent.CountDownLatch
-import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read

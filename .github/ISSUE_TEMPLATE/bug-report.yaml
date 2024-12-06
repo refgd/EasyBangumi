@@ -27,7 +27,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: 纯纯看番版本号
+      label: 纯纯看看版本号
       description: 在更多->关于里可以查看当前版本
       placeholder: 例如 5.4.2
     validations:
@@ -44,7 +44,7 @@ body:
     id: stack-trace
     attributes:
       label: 错误栈报告
-      description: 如果问题导致了纯纯看番崩溃，请在下方粘贴崩溃页面的内容，文本和截图都可以。
+      description: 如果问题导致了纯纯看看崩溃，请在下方粘贴崩溃页面的内容，文本和截图都可以。
       placeholder: Stack Trace
     validations:
       required: false

@@ -3,8 +3,8 @@ package com.heyanle.easybangumi4.plugin.extension
 import android.graphics.drawable.Drawable
 import androidx.core.content.res.ResourcesCompat
 import com.heyanle.easybangumi4.case.ExtensionCase
-import com.heyanle.extension_api.ExtensionIconSource
-import com.heyanle.extension_api.IconFactory
+import com.heyanle.easybangumi4.plugin.api.extension.ExtensionIconSource
+import com.heyanle.easybangumi4.plugin.api.extension.IconFactory
 import java.lang.ref.SoftReference
 
 /**

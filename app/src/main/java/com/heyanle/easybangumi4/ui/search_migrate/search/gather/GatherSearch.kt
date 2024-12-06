@@ -33,13 +33,13 @@ import androidx.paging.compose.collectAsLazyPagingItems
 import com.heyanle.easy_i18n.R
 import com.heyanle.easybangumi4.LocalNavController
 import com.heyanle.easybangumi4.navigationDetailed
+import com.heyanle.easybangumi4.plugin.api.entity.CartoonCover
+import com.heyanle.easybangumi4.plugin.api.entity.toIdentify
 import com.heyanle.easybangumi4.plugin.source.LocalSourceBundleController
-import com.heyanle.easybangumi4.source_api.entity.CartoonCover
-import com.heyanle.easybangumi4.source_api.entity.toIdentify
 import com.heyanle.easybangumi4.ui.common.CartoonCardWithCover
 import com.heyanle.easybangumi4.ui.common.PagingCommon
-import com.heyanle.easybangumi4.ui.common.pagingCommonHor
 import com.heyanle.easybangumi4.ui.common.cover_star.CoverStarViewModel
+import com.heyanle.easybangumi4.ui.common.pagingCommonHor
 import com.heyanle.easybangumi4.ui.search_migrate.search.SearchViewModel
 
 /**
@@ -51,7 +51,7 @@ fun ColumnScope.GatherSearch(
 ) {
     val nav = LocalNavController.current
     val keyboard = LocalSoftwareKeyboardController.current
-    val searchComponents = LocalSourceBundleController.current.searches()
+    val searchComponents = LocalSourceBundleController.current.sourceInfos()
     val vm =
         viewModel<GatherSearchViewModel>(factory = GatherSearchViewModelFactory(searchComponents))
 

@@ -23,10 +23,10 @@ import com.heyanle.easybangumi4.plugin.extension.provider.JsExtensionProvider
 import com.heyanle.easybangumi4.plugin.js.extension.JSExtensionCryLoader
 import com.heyanle.easybangumi4.plugin.js.extension.JSExtensionLoader
 import com.heyanle.easybangumi4.plugin.js.runtime.JSRuntimeProvider
-import com.heyanle.easybangumi4.setting.SettingMMKVPreferences
-import com.heyanle.easybangumi4.setting.SettingPreferences
 import com.heyanle.easybangumi4.plugin.source.SourceConfig
 import com.heyanle.easybangumi4.plugin.source.SourcePreferences
+import com.heyanle.easybangumi4.setting.SettingMMKVPreferences
+import com.heyanle.easybangumi4.setting.SettingPreferences
 import com.heyanle.easybangumi4.theme.EasyThemeMode
 import com.heyanle.easybangumi4.utils.getFilePath
 import com.heyanle.easybangumi4.utils.getInnerFilePath
@@ -39,7 +39,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.File

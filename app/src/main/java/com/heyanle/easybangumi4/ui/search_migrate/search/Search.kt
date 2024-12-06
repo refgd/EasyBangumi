@@ -1,6 +1,5 @@
 package com.heyanle.easybangumi4.ui.search_migrate.search
 
-import android.os.Process
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -59,8 +58,6 @@ import com.heyanle.easybangumi4.LocalNavController
 import com.heyanle.easybangumi4.ui.common.EmptyPage
 import com.heyanle.easybangumi4.ui.search_migrate.search.gather.GatherSearch
 import com.heyanle.easybangumi4.ui.search_migrate.search.normal.NormalSearch
-import java.io.File
-
 
 /**
  * Created by heyanlin on 2023/12/18.
@@ -93,18 +90,6 @@ fun Search(
                 nav.popBackStack()
             },
             onSearch = {
-//                val pid = Process.myPid()
-////self也可以改成pid
-////self也可以改成pid
-//                val f1 = File("/proc/self/maps")
-//                if (f1.exists() && f1.isFile) {
-//                    f1.readLines().forEach {
-//                        it.logi("Search")
-//                    }
-//                } else {
-//                    //Log.d("tag_so", " cannot read so libs " + f1.exists())
-//                }
-               // BydsSource.generateToken().logi("Search")
                 searchVM.search(it)
             },
             onTextChange = {

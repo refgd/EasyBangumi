@@ -1,7 +1,6 @@
 package com.heyanle.easybangumi4.cartoon.story.download.action
 
 import androidx.annotation.OptIn
-import androidx.core.text.util.LocalePreferences
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.Clock
 import androidx.media3.common.util.UnstableApi
@@ -14,14 +13,12 @@ import androidx.media3.transformer.InAppMuxer
 import androidx.media3.transformer.ProgressHolder
 import androidx.media3.transformer.Transformer
 import com.heyanle.easybangumi4.APP
-import com.heyanle.easybangumi4.R
 import com.heyanle.easybangumi4.cartoon.entity.CartoonDownloadReq
 import com.heyanle.easybangumi4.cartoon.story.download.CartoonDownloadPreference
 import com.heyanle.easybangumi4.cartoon.story.download.runtime.CartoonDownloadRuntime
 import com.heyanle.easybangumi4.exo.CartoonMediaSourceFactory
 import com.heyanle.easybangumi4.utils.CoroutineProvider
 import com.heyanle.easybangumi4.utils.getCachePath
-import com.heyanle.easybangumi4.utils.logi
 import com.heyanle.easybangumi4.utils.stringRes
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.MainScope
@@ -29,9 +26,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.io.File
 import java.util.concurrent.CountDownLatch
-import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.RejectedExecutionException
-import java.util.concurrent.RejectedExecutionHandler
 import java.util.concurrent.SynchronousQueue
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit

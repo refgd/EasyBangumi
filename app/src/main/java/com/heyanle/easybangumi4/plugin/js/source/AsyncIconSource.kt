@@ -4,8 +4,8 @@ import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
 import android.net.Uri
 import androidx.annotation.DrawableRes
-import com.heyanle.easybangumi4.source_api.IconSource
-import com.heyanle.easybangumi4.source_api.Source
+import com.heyanle.easybangumi4.plugin.api.IconSource
+import com.heyanle.easybangumi4.plugin.api.Source
 import okhttp3.HttpUrl
 import java.io.File
 import java.nio.ByteBuffer

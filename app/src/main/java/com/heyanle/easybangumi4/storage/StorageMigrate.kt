@@ -6,7 +6,6 @@ import com.heyanle.easybangumi4.storage.entity.CartoonStorage
 import com.heyanle.easybangumi4.utils.toJson
 import kotlinx.coroutines.flow.first
 import java.io.File
-import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
 
 /**

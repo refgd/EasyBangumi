@@ -6,9 +6,7 @@ import android.os.ParcelFileDescriptor
 import android.util.Log
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
-import androidx.test.internal.util.LogUtil
 import com.heyanle.easybangumi4.APP
-import com.heyanle.easybangumi4.App
 import com.heyanle.easybangumi4.BuildConfig
 import com.hippo.unifile.UniFile
 import java.io.File

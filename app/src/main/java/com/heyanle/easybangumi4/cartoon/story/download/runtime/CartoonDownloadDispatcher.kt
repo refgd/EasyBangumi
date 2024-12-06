@@ -3,17 +3,14 @@ package com.heyanle.easybangumi4.cartoon.story.download.runtime
 import android.content.Intent
 import android.os.Build
 import com.heyanle.easybangumi4.APP
-import com.heyanle.easybangumi4.R
 import com.heyanle.easybangumi4.cartoon.entity.CartoonDownloadReq
 import com.heyanle.easybangumi4.cartoon.story.download.action.BaseAction
 import com.heyanle.easybangumi4.cartoon.story.download.req.CartoonDownloadReqController
 import com.heyanle.easybangumi4.cartoon.story.download.service.DownloadingService
 import com.heyanle.easybangumi4.cartoon.story.local.CartoonLocalController
 import com.heyanle.easybangumi4.utils.CoroutineProvider
-import com.heyanle.easybangumi4.utils.scaleHelper
 import com.heyanle.easybangumi4.utils.stringRes
 import com.heyanle.inject.api.get
-import com.heyanle.inject.api.getOrNull
 import com.heyanle.inject.core.Inject
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.flow.MutableStateFlow

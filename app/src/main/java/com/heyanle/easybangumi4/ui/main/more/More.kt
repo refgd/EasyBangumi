@@ -1,7 +1,9 @@
 package com.heyanle.easybangumi4.ui.main.more
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -11,19 +13,19 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CardGiftcard
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Extension
-import androidx.compose.material.icons.filled.Handshake
 import androidx.compose.material.icons.filled.HistoryToggleOff
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Tag
 import androidx.compose.material.icons.outlined.Report
-import androidx.compose.material.icons.outlined.RunCircle
 import androidx.compose.material3.Divider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -35,16 +37,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.heyanle.easybangumi4.ABOUT
-import com.heyanle.easybangumi4.BuildConfig
 import com.heyanle.easybangumi4.LocalNavController
 import com.heyanle.easybangumi4.R
 import com.heyanle.easybangumi4.SOURCE_MANAGER
 import com.heyanle.easybangumi4.STORAGE
 import com.heyanle.easybangumi4.STORY
-import com.heyanle.easybangumi4.TestMain
 import com.heyanle.easybangumi4.navigationCartoonTag
 import com.heyanle.easybangumi4.navigationSetting
-import com.heyanle.easybangumi4.setting.SettingMMKVPreferences
 import com.heyanle.easybangumi4.setting.SettingPreferences
 import com.heyanle.easybangumi4.ui.common.BooleanPreferenceItem
 import com.heyanle.easybangumi4.ui.common.OkImage
@@ -62,7 +61,7 @@ fun More() {
     val nav = LocalNavController.current
 
     val settingPreferences: SettingPreferences by Inject.injectLazy()
-    val settingMMKVPreferences: SettingMMKVPreferences by Inject.injectLazy()
+    var webEnabled by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -77,7 +76,11 @@ fun More() {
                 Text(text = stringResource(id = com.heyanle.easy_i18n.R.string.in_private))
             },
             subtitle = {
-                Text(text = stringResource(id = com.heyanle.easy_i18n.R.string.in_private_msg))
+                Text(
+                    text = stringResource(id = com.heyanle.easy_i18n.R.string.in_private_msg),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             },
             icon = {
                 Icon(
@@ -141,6 +144,27 @@ fun More() {
             }
         )
 
+        BooleanItem(
+            icon = {
+                Icon(
+                    imageVector = Icons.Filled.Language,
+                    contentDescription = stringResource(id = com.heyanle.easy_i18n.R.string.web_server)
+                )
+            },
+            title = {
+                Text(text = stringResource(id = com.heyanle.easy_i18n.R.string.web_server))
+            },
+            subtitle = {
+                Text(
+                    text = stringResource(id = com.heyanle.easy_i18n.R.string.web_server_msg),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            },
+            isChecked = webEnabled,
+            onCheckedChange = { webEnabled = it }
+        )
+
         Divider()
 
 
@@ -169,32 +193,6 @@ fun More() {
                 )
             }
         )
-//        ListItem(
-//            modifier = Modifier.clickable {
-//                TestMain.main()
-//            },
-//            headlineContent = { Text(text = "测试按钮") },
-//            leadingContent = {
-//                Icon(
-//                    Icons.Outlined.RunCircle,
-//                    contentDescription = stringResource(id = com.heyanle.easy_i18n.R.string.about)
-//                )
-//            }
-//        )
-        if(BuildConfig.DEBUG){
-            ListItem(
-                modifier = Modifier.clickable {
-                    TestMain.main()
-                },
-                headlineContent = { Text(text = "测试按钮") },
-                leadingContent = {
-                    Icon(
-                        Icons.Outlined.RunCircle,
-                        contentDescription = stringResource(id = com.heyanle.easy_i18n.R.string.about)
-                    )
-                }
-            )
-        }
     }
 
 }
@@ -209,7 +207,7 @@ fun EasyBangumiCard() {
     ) {
         OkImage(
             modifier = Modifier.size(64.dp),
-            image = R.mipmap.logo_new,
+            image = R.mipmap.logo_n,
             contentDescription = stringResource(com.heyanle.easy_i18n.R.string.app_name)
         )
         Spacer(modifier = Modifier.size(16.dp))
@@ -217,4 +215,49 @@ fun EasyBangumiCard() {
     }
 
 }
+
+@Composable
+fun BooleanItem(
+    icon: @Composable (() -> Unit)? = null,
+    title: @Composable (() -> Unit)? = null,
+    subtitle: @Composable (() -> Unit)? = null,
+    isChecked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(12.dp, 0.dp, 18.dp, 18.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Icon at the start if provided
+        icon?.let {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .padding(end = 12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                it()
+            }
+        }
+
+        // Title and subtitle
+        Column(modifier = Modifier.weight(1f)) {
+            if (title != null) {
+                title()
+            }
+            if (subtitle != null) {
+                subtitle()
+            }
+        }
+
+        // Switch at the end
+        Switch(
+            checked = isChecked,
+            onCheckedChange = onCheckedChange
+        )
+    }
+}
+
 

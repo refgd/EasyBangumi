@@ -56,15 +56,15 @@ import androidx.paging.compose.collectAsLazyPagingItems
 import com.heyanle.easy_i18n.R
 import com.heyanle.easybangumi4.LocalNavController
 import com.heyanle.easybangumi4.navigationDetailed
+import com.heyanle.easybangumi4.plugin.api.entity.CartoonCover
+import com.heyanle.easybangumi4.plugin.api.entity.toIdentify
 import com.heyanle.easybangumi4.plugin.source.LocalSourceBundleController
-import com.heyanle.easybangumi4.source_api.entity.CartoonCover
-import com.heyanle.easybangumi4.source_api.entity.toIdentify
 import com.heyanle.easybangumi4.ui.common.CartoonCard
 import com.heyanle.easybangumi4.ui.common.FastScrollToTopFab
 import com.heyanle.easybangumi4.ui.common.PagingCommon
 import com.heyanle.easybangumi4.ui.common.TabIndicator
-import com.heyanle.easybangumi4.ui.common.pagingCommon
 import com.heyanle.easybangumi4.ui.common.cover_star.CoverStarViewModel
+import com.heyanle.easybangumi4.ui.common.pagingCommon
 import com.heyanle.easybangumi4.ui.search_migrate.search.SearchViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -79,11 +79,11 @@ fun ColumnScope.NormalSearch(
     searchViewModel: SearchViewModel,
 ) {
     val scope = rememberCoroutineScope()
-    val searchComponents = LocalSourceBundleController.current.searches()
+    val sourceInfos = LocalSourceBundleController.current.searchAbles()
     val pagerState =
-        rememberPagerState(if (searchComponents.isNotEmpty()) searchComponents.indexOfFirst { it.source.key == defSourceKey }
-            .coerceIn(0, searchComponents.size - 1) else 0, 0f) {
-            searchComponents.size
+        rememberPagerState(if (sourceInfos.isNotEmpty()) sourceInfos.indexOfFirst { it.source.key == defSourceKey }
+            .coerceIn(0, sourceInfos.size - 1) else 0, 0f) {
+            sourceInfos.size
         }
 
     ScrollableTabRow(
@@ -104,7 +104,7 @@ fun ColumnScope.NormalSearch(
         },
         modifier = Modifier.fillMaxWidth()
     ) {
-        searchComponents.forEachIndexed { index, searchComponent ->
+        sourceInfos.forEachIndexed { index, searchComponent ->
             Tab(
                 selected = index == pagerState.currentPage,
                 onClick = {
@@ -129,12 +129,11 @@ fun ColumnScope.NormalSearch(
             .weight(1f),
         state = pagerState
     ) {
-
-        searchComponents.getOrNull(it)?.let { searchComponent ->
+        sourceInfos.getOrNull(it)?.let { sourceInfo ->
             val normalSearchViewModel = viewModel<NormalSearchViewModel>(
-                factory = NormalSearchViewModelFactory(searchComponent),
+                factory = NormalSearchViewModelFactory(sourceInfo),
                 viewModelStoreOwner = searchViewModel.viewModelOwnerMap.getViewModelStoreOwner(
-                    searchComponent.source.key
+                    sourceInfo.source.key
                 )
             )
             NormalSearchPage(
@@ -143,7 +142,6 @@ fun ColumnScope.NormalSearch(
                 normalSearchViewModel = normalSearchViewModel
             )
         }
-
     }
 }
 
@@ -194,8 +192,6 @@ fun NormalSearchPage(
                 .fillMaxSize()
                 .pullRefresh(state)
         ) {
-
-
             if (page.itemCount > 0) {
                 LazyColumn(
                     modifier = Modifier.nestedScroll(object : NestedScrollConnection {

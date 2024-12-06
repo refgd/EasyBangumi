@@ -51,7 +51,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.heyanle.easy_i18n.R
-import com.heyanle.easybangumi4.LocalNavController
 import com.heyanle.easybangumi4.setting.SettingPreferences
 import com.heyanle.easybangumi4.theme.EasyThemeController
 import com.heyanle.easybangumi4.theme.EasyThemeMode

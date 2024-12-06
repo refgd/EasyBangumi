@@ -5,8 +5,8 @@ import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
-import com.heyanle.easybangumi4.utils.loge
 import com.heyanle.easybangumi4.setting.SettingPreferences
+import com.heyanle.easybangumi4.utils.loge
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow

@@ -21,18 +21,15 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.google.firebase.analytics.FirebaseAnalytics
 import com.google.firebase.analytics.logEvent
-import com.heyanle.easybangumi4.plugin.source.utils.network.WebViewHelperImpl
+import com.heyanle.easybangumi4.plugin.api.entity.CartoonCover
+import com.heyanle.easybangumi4.plugin.api.entity.CartoonSummary
 import com.heyanle.easybangumi4.plugin.source.utils.network.WebViewHelperV2Impl
-import com.heyanle.easybangumi4.source_api.entity.CartoonCover
-import com.heyanle.easybangumi4.source_api.entity.CartoonSummary
 import com.heyanle.easybangumi4.theme.NormalSystemBarColor
 import com.heyanle.easybangumi4.ui.WebViewUser
 import com.heyanle.easybangumi4.ui.about.About
 import com.heyanle.easybangumi4.ui.cartoon_play.CartoonPlay
 import com.heyanle.easybangumi4.ui.cartoon_play.view_model.CartoonPlayViewModel
 import com.heyanle.easybangumi4.ui.dlna.Dlna
-import com.heyanle.easybangumi4.ui.extension_push.ExtensionPush
-import com.heyanle.easybangumi4.ui.story.download.Download
 import com.heyanle.easybangumi4.ui.main.Main
 import com.heyanle.easybangumi4.ui.main.history.History
 import com.heyanle.easybangumi4.ui.search_migrate.migrate.Migrate
@@ -177,10 +174,12 @@ fun NavHostController.navigationLocalPlay(
     navigate("${LOCAL_PLAY}?uuid=${uuid}")
 }
 fun NavHostController.navigationSourceConfig(
-    source: String
+    source: String,
+    label: String
 ) {
     val es = URLEncoder.encode(source, "utf-8")
-    navigate("${SOURCE_CONFIG}?source_key=${es}")
+    val lb = URLEncoder.encode(label, "utf-8")
+    navigate("${SOURCE_CONFIG}?source_key=${es}&source_label=${lb}")
 }
 
 fun NavHostController.navigationSetting(
@@ -386,7 +385,6 @@ fun Nav() {
             composable(EXTENSION_PUSH) {
                 ScreenShowEvent()
                 NormalSystemBarColor()
-                ExtensionPush()
                 //Download()
                 //ExtensionPush()
             }
@@ -401,13 +399,12 @@ fun Nav() {
                 )
             ) {
                 ScreenShowEvent()
-                val defSearchKey = it.arguments?.getInt("defIndex", -1) ?: -1
                 NormalSystemBarColor()
                 Surface(
                     color = MaterialTheme.colorScheme.background,
                     contentColor = MaterialTheme.colorScheme.onBackground
                 ) {
-                    SourceManager(defSearchKey)
+                    SourceManager()
                 }
             }
 
@@ -476,19 +473,21 @@ fun Nav() {
 
 
             composable(
-                "${SOURCE_CONFIG}?source_key={key}",
+                "${SOURCE_CONFIG}?source_key={key}&source_label={label}",
                 arguments = listOf(
                     navArgument("key") { defaultValue = "" },
+                    navArgument("label") { defaultValue = "" },
                 )
             ) {
                 ScreenShowEvent()
                 val source = it.arguments?.getString("key") ?: ""
+                val label = it.arguments?.getString("label") ?: ""
                 NormalSystemBarColor()
                 Surface(
                     color = MaterialTheme.colorScheme.background,
                     contentColor = MaterialTheme.colorScheme.onBackground
                 ) {
-                    SourceConfig(sourceKey = URLDecoder.decode(source, "utf-8"))
+                    SourceConfig(sourceKey = URLDecoder.decode(source, "utf-8"), sourceLabel = URLDecoder.decode(label, "utf-8"))
                 }
             }
 

@@ -1,8 +1,8 @@
 package com.heyanle.easybangumi4.plugin.source.utils.network
 
 import android.webkit.WebView
-import com.heyanle.easybangumi4.source_api.utils.api.WebViewHelper
-import com.heyanle.easybangumi4.source_api.utils.api.WebViewHelperV2
+import com.heyanle.easybangumi4.plugin.api.utils.api.WebViewHelper
+import com.heyanle.easybangumi4.plugin.api.utils.api.WebViewHelperV2
 import com.heyanle.easybangumi4.utils.getHtml
 import com.heyanle.easybangumi4.utils.stop
 import kotlinx.coroutines.Dispatchers

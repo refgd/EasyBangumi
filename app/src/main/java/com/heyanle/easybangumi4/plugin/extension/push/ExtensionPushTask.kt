@@ -1,7 +1,6 @@
 package com.heyanle.easybangumi4.plugin.extension.push
 
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
 
 /**
  * Created by heyanlin on 2024/10/29.

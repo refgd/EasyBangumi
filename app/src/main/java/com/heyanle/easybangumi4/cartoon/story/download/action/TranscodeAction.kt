@@ -1,7 +1,6 @@
 package com.heyanle.easybangumi4.cartoon.story.download.action
 
 import android.app.Application
-import com.heyanle.easybangumi4.R
 import com.heyanle.easybangumi4.cartoon.entity.CartoonDownloadReq
 import com.heyanle.easybangumi4.cartoon.story.download.runtime.CartoonDownloadRuntime
 import com.heyanle.easybangumi4.cartoon.story.download.utils.M3U8Utils

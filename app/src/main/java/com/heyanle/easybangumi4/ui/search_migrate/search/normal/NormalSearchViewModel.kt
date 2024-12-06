@@ -8,8 +8,10 @@ import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
-import com.heyanle.easybangumi4.source_api.component.search.SearchComponent
-import com.heyanle.easybangumi4.source_api.entity.CartoonCover
+import com.heyanle.easybangumi4.plugin.api.component.search.SearchComponent
+import com.heyanle.easybangumi4.plugin.api.entity.CartoonCover
+import com.heyanle.easybangumi4.plugin.source.SourceInfo
+import com.heyanle.easybangumi4.plugin.source.bundle.getComponentProxy
 import com.heyanle.easybangumi4.ui.search_migrate.PagingSearchSource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
@@ -18,7 +20,7 @@ import kotlinx.coroutines.launch
  * Created by heyanlin on 2023/12/18.
  */
 class NormalSearchViewModel(
-    private val searchComponent: SearchComponent,
+    private val sourceInfo: SourceInfo.Loaded,
 ) : ViewModel() {
 
     // 当前搜索的关键字，用于刷新和懒加载判断
@@ -38,6 +40,14 @@ class NormalSearchViewModel(
                 searchPagingState.value = null
                 return@launch
             }
+
+            val searchComponent = sourceInfo.componentBundle.getComponentProxy<SearchComponent>()
+            if(searchComponent == null){
+                curKeyWord = ""
+                searchPagingState.value = null
+                return@launch
+            }
+
             curKeyWord = searchKey
             searchPagingState.value =
                 getPager(searchKey, searchComponent).flow.cachedIn(viewModelScope)
@@ -60,14 +70,14 @@ class NormalSearchViewModel(
 }
 
 class NormalSearchViewModelFactory(
-    private val searchComponent: SearchComponent
+    private val sourceInfo: SourceInfo.Loaded
 ) : ViewModelProvider.Factory {
 
     @Suppress("UNCHECKED_CAST")
     @SuppressWarnings("unchecked")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(NormalSearchViewModel::class.java))
-            return NormalSearchViewModel(searchComponent) as T
+            return NormalSearchViewModel(sourceInfo) as T
         throw RuntimeException("unknown class :" + modelClass.name)
     }
 }

@@ -4,7 +4,6 @@ import com.heyanle.easybangumi4.plugin.js.utils.JSContext
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withTimeout
 import org.mozilla.javascript.Scriptable
-import kotlin.jvm.Throws
 
 /**
  * Created by heyanle on 2024/7/27.

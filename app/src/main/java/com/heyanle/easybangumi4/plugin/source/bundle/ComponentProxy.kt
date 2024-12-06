@@ -1,11 +1,7 @@
 package com.heyanle.easybangumi4.plugin.source.bundle
 
-import com.heyanle.easy_crasher.CrashHandler
-import com.heyanle.easybangumi4.base.preferences.mmkv.MMKVPreference
 import com.heyanle.easybangumi4.crash.SourceCrashController
-import com.heyanle.easybangumi4.plugin.source.SourcePreferences
-import com.heyanle.easybangumi4.source_api.component.Component
-import com.tencent.mmkv.MMKV
+import com.heyanle.easybangumi4.plugin.api.component.Component
 import java.lang.reflect.InvocationHandler
 import java.lang.reflect.Method
 

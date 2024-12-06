@@ -19,10 +19,10 @@ import com.heyanle.easybangumi4.cartoon.story.local.source.LocalSource
 import com.heyanle.easybangumi4.case.SourceStateCase
 import com.heyanle.easybangumi4.exo.CartoonMediaSourceFactory
 import com.heyanle.easybangumi4.exo.thumbnail.ThumbnailBuffer
+import com.heyanle.easybangumi4.plugin.api.entity.Episode
+import com.heyanle.easybangumi4.plugin.api.entity.PlayLine
+import com.heyanle.easybangumi4.plugin.api.entity.PlayerInfo
 import com.heyanle.easybangumi4.setting.SettingPreferences
-import com.heyanle.easybangumi4.source_api.entity.Episode
-import com.heyanle.easybangumi4.source_api.entity.PlayLine
-import com.heyanle.easybangumi4.source_api.entity.PlayerInfo
 import com.heyanle.easybangumi4.ui.cartoon_play.cartoon_recorded.CartoonRecordedModel
 import com.heyanle.easybangumi4.utils.CoroutineProvider
 import com.heyanle.easybangumi4.utils.MediaAndroidUtils

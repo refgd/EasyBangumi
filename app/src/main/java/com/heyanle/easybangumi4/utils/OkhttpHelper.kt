@@ -2,13 +2,10 @@ package com.heyanle.easybangumi4.utils
 
 import com.heyanle.easybangumi4.APP
 import com.heyanle.easybangumi4.BuildConfig
-import com.heyanle.easybangumi4.base.DataResult
 import okhttp3.Cache
 import okhttp3.OkHttpClient
-import okhttp3.Request
 import okhttp3.logging.HttpLoggingInterceptor
 import java.io.File
-import java.io.IOException
 
 /**
  * Created by HeYanLe on 2023/4/3 23:03.

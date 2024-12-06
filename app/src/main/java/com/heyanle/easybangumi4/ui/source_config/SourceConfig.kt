@@ -1,7 +1,6 @@
 package com.heyanle.easybangumi4.ui.source_config
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,27 +18,31 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.heyanle.easy_i18n.R
-import com.heyanle.easybangumi4.APP
 import com.heyanle.easybangumi4.LocalNavController
-import com.heyanle.easybangumi4.plugin.source.SourceConfig
+import com.heyanle.easybangumi4.plugin.api.component.detailed.DetailedComponent
+import com.heyanle.easybangumi4.plugin.api.component.preference.PreferenceComponent
+import com.heyanle.easybangumi4.plugin.api.component.preference.SourcePreference
+import com.heyanle.easybangumi4.plugin.api.utils.api.PreferenceHelper
 import com.heyanle.easybangumi4.plugin.source.SourceInfo
 import com.heyanle.easybangumi4.plugin.source.bundle.get
-import com.heyanle.easybangumi4.source_api.component.preference.PreferenceComponent
-import com.heyanle.easybangumi4.source_api.component.preference.SourcePreference
-import com.heyanle.easybangumi4.source_api.utils.api.PreferenceHelper
 import com.heyanle.easybangumi4.ui.common.BooleanPreferenceItem
 import com.heyanle.easybangumi4.ui.common.ErrorPage
+import com.heyanle.easybangumi4.ui.common.LoadingPage
 import com.heyanle.easybangumi4.ui.common.SourceContainerBase
 import com.heyanle.easybangumi4.ui.common.StringEditPreferenceItem
 import com.heyanle.easybangumi4.ui.common.StringSelectPreferenceItem
+import com.heyanle.easybangumi4.utils.logi
 
 /**
  * Created by HeYanLe on 2023/8/5 21:36.
@@ -48,62 +51,47 @@ import com.heyanle.easybangumi4.ui.common.StringSelectPreferenceItem
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SourceConfig(
-    sourceKey: String
+    sourceKey: String,
+    sourceLabel: String
 ) {
 
     val nav = LocalNavController.current
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
-    SourceContainerBase(hasSource = {
-        it.preference(sourceKey) != null
-    }) {
-        val sourceInfo = it.sourceInfo(sourceKey)
-        when (sourceInfo) {
-
-            is SourceInfo.Loaded -> {
-                it.preference(sourceKey)?.let { config ->
-                    val preferenceHelper = sourceInfo.componentBundle.get<PreferenceHelper>()
-                    Column {
-                        TopAppBar(
-                            title = {
-                                Text(
-                                    text = stringResource(id = com.heyanle.easy_i18n.R.string.source_config) + " - " + sourceInfo.source.label
-                                )
-                            },
-                            navigationIcon = {
-                                IconButton(onClick = {
-                                    nav.popBackStack()
-                                }) {
-                                    Icon(
-                                        imageVector = Icons.Filled.ArrowBack,
-                                        stringResource(id = R.string.back)
-                                    )
-                                }
-
-                            },
-                            scrollBehavior = scrollBehavior
-                        )
-
-                        preferenceHelper?.let {
-                            ConfigList(
-                                sourcePreferenceHelper = it,
-                                configComponent = config,
-                                nestedScrollConnection = scrollBehavior.nestedScrollConnection
-                            )
-                        }
-
-                    }
+    Column {
+        TopAppBar(
+            title = {
+                Text(
+                    text = stringResource(id = com.heyanle.easy_i18n.R.string.source_config) + " - " + sourceLabel
+                )
+            },
+            navigationIcon = {
+                IconButton(onClick = {
+                    nav.popBackStack()
+                }) {
+                    Icon(
+                        imageVector = Icons.Filled.ArrowBack,
+                        stringResource(id = R.string.back)
+                    )
                 }
-            }
 
-            else -> {
+            },
+            scrollBehavior = scrollBehavior
+        )
 
+        SourceContainerBase(
+            resolve = { bundle -> bundle.preference(sourceKey) }
+        ) { bundle, preference ->
+            val preferenceHelper = bundle.sourceInfo(sourceKey)?.componentBundle?.get<PreferenceHelper>()
+            preferenceHelper?.let {
+                ConfigList(
+                    sourcePreferenceHelper = it,
+                    configComponent = preference,
+                    nestedScrollConnection = scrollBehavior.nestedScrollConnection
+                )
             }
         }
-
-
     }
-
 }
 
 @Composable

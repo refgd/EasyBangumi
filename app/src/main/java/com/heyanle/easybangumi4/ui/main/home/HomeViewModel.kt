@@ -5,8 +5,8 @@ import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.viewModelScope
 import com.heyanle.easybangumi4.case.SourceStateCase
-import com.heyanle.easybangumi4.source_api.component.page.PageComponent
-import com.heyanle.easybangumi4.source_api.component.page.SourcePage
+import com.heyanle.easybangumi4.plugin.api.component.page.PageComponent
+import com.heyanle.easybangumi4.plugin.api.component.page.SourcePage
 import com.heyanle.inject.core.Inject
 import com.heyanle.okkv2.core.okkv
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -48,10 +48,10 @@ class HomeViewModel : ViewModel() {
                 sourceStateCase.flowBundle(),
                 _stateFlow.map { it.selectionKey }.distinctUntilChanged()
             ) { sourceBundle, s ->
-                val pages = sourceBundle.pages()
-                if (pages.isEmpty()) {
+                val sources = sourceBundle.sources()
+                if (sources.isEmpty()) {
                     null
-                } else sourceBundle.page(s) ?: pages[0]
+                } else sourceBundle.page(s) ?: sourceBundle.page(sources[0].key)
             }.collectLatest { pa ->
                 if (pa == null) {
                     _stateFlow.update {

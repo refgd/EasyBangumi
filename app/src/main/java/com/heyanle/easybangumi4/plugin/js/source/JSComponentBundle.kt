@@ -4,6 +4,20 @@ import android.app.Application
 import android.content.Context
 import androidx.annotation.WorkerThread
 import com.heyanle.easybangumi4.APP
+import com.heyanle.easybangumi4.plugin.api.component.Component
+import com.heyanle.easybangumi4.plugin.api.component.detailed.DetailedComponent
+import com.heyanle.easybangumi4.plugin.api.component.page.PageComponent
+import com.heyanle.easybangumi4.plugin.api.component.play.PlayComponent
+import com.heyanle.easybangumi4.plugin.api.component.preference.PreferenceComponent
+import com.heyanle.easybangumi4.plugin.api.component.preference.SourcePreference
+import com.heyanle.easybangumi4.plugin.api.component.search.SearchComponent
+import com.heyanle.easybangumi4.plugin.api.utils.api.CaptchaHelper
+import com.heyanle.easybangumi4.plugin.api.utils.api.NetworkHelper
+import com.heyanle.easybangumi4.plugin.api.utils.api.OkhttpHelper
+import com.heyanle.easybangumi4.plugin.api.utils.api.PreferenceHelper
+import com.heyanle.easybangumi4.plugin.api.utils.api.StringHelper
+import com.heyanle.easybangumi4.plugin.api.utils.api.WebViewHelper
+import com.heyanle.easybangumi4.plugin.api.utils.api.WebViewHelperV2
 import com.heyanle.easybangumi4.plugin.js.component.JSDetailedComponent
 import com.heyanle.easybangumi4.plugin.js.component.JSPageComponent
 import com.heyanle.easybangumi4.plugin.js.component.JSPlayComponent
@@ -12,23 +26,10 @@ import com.heyanle.easybangumi4.plugin.js.component.JSSearchComponent
 import com.heyanle.easybangumi4.plugin.source.SourceException
 import com.heyanle.easybangumi4.plugin.source.bundle.ComponentBundle
 import com.heyanle.easybangumi4.plugin.source.bundle.ComponentProxy
-import com.heyanle.easybangumi4.source_api.component.Component
-import com.heyanle.easybangumi4.source_api.component.detailed.DetailedComponent
-import com.heyanle.easybangumi4.source_api.component.page.PageComponent
-import com.heyanle.easybangumi4.source_api.component.play.PlayComponent
-import com.heyanle.easybangumi4.source_api.component.preference.PreferenceComponent
-import com.heyanle.easybangumi4.source_api.component.preference.SourcePreference
-import com.heyanle.easybangumi4.source_api.component.search.SearchComponent
-import com.heyanle.easybangumi4.source_api.utils.api.CaptchaHelper
-import com.heyanle.easybangumi4.source_api.utils.api.NetworkHelper
-import com.heyanle.easybangumi4.source_api.utils.api.OkhttpHelper
-import com.heyanle.easybangumi4.source_api.utils.api.PreferenceHelper
-import com.heyanle.easybangumi4.source_api.utils.api.StringHelper
-import com.heyanle.easybangumi4.source_api.utils.api.WebViewHelper
-import com.heyanle.easybangumi4.source_api.utils.api.WebViewHelperV2
 import com.heyanle.easybangumi4.utils.logi
 import com.heyanle.inject.api.get
 import com.heyanle.inject.core.Inject
+import kotlinx.coroutines.runBlocking
 import java.lang.reflect.Proxy
 import kotlin.reflect.KClass
 
@@ -42,9 +43,18 @@ class JSComponentBundle(
 
     private val bundle: HashMap<KClass<*>, Any> = hashMapOf()
     private val componentProxy:  HashMap<KClass<*>, Any> = hashMapOf()
+    private var inited: Boolean = false
 
     @WorkerThread
     override suspend fun init() {
+
+    }
+
+    private suspend fun _init() {
+        this.inited = true
+
+        jsSource.key.logi("JsIInit")
+
         // 1. 注入工具类
         put(StringHelper::class, Inject.get(jsSource.key))
         put(NetworkHelper::class, Inject.get(jsSource.key))
@@ -103,10 +113,6 @@ class JSComponentBundle(
                     null
                 )
             }
-
-
-
-
         }
 
         // 5. 检查 & 加载 Component
@@ -173,15 +179,14 @@ class JSComponentBundle(
             }
 
         }
-
-
     }
-
     override fun get(clazz: KClass<*>): Any? {
         return bundle[clazz]
     }
 
-    override fun getComponentProxy(clazz: KClass<*>): Any? {
+    override suspend fun getComponentProxy(clazz: KClass<*>): Any? {
+        if(!this.inited) this._init();
+
         val o = componentProxy[clazz]
         if (o == null){
             val instance = get(clazz) ?: return null

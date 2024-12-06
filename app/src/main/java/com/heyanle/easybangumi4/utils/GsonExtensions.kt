@@ -5,7 +5,6 @@ import com.heyanle.inject.core.Inject
 import com.squareup.moshi.JsonAdapter
 import com.squareup.moshi.Moshi
 import java.lang.reflect.Type
-import kotlin.reflect.KClass
 import kotlin.reflect.jvm.javaType
 import kotlin.reflect.typeOf
 

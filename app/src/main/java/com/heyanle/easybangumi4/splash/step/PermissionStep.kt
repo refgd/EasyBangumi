@@ -19,7 +19,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.heyanle.easybangumi4.APP
-import com.heyanle.easybangumi4.R
 import com.heyanle.easybangumi4.utils.IntentHelper
 import com.heyanle.easybangumi4.utils.stringRes
 import com.heyanle.easybangumi4.utils.toast
@@ -45,33 +44,6 @@ class PermissionStep: BaseStep {
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .padding(12.dp, 16.dp)
         ) {
-            ListItem(
-                colors = ListItemDefaults.colors(
-                    containerColor = Color.Transparent
-                ),
-                headlineContent = {
-                    Text(text = stringResource(id = com.heyanle.easy_i18n.R.string.get_app_list_permission))
-                },
-                supportingContent = {
-                    Text(text = stringResource(id = com.heyanle.easy_i18n.R.string.get_app_list_permission_msg))
-                },
-                trailingContent = {
-                    OutlinedButton(
-                        colors = ButtonDefaults.outlinedButtonColors(),
-                        border = BorderStroke(
-                            width = 1.dp,
-                            color = MaterialTheme.colorScheme.primary,
-                        ),
-                        onClick = {
-                            IntentHelper.openAppDetailed(APP.packageName, APP)
-                            stringRes(com.heyanle.easy_i18n.R.string.get_app_list_permission_toast).toast()
-                        }
-                    ) {
-                        Text(text = stringResource(id = com.heyanle.easy_i18n.R.string.app_detailed))
-                    }
-                }
-            )
-
             ListItem(
                 colors = ListItemDefaults.colors(
                     containerColor = Color.Transparent

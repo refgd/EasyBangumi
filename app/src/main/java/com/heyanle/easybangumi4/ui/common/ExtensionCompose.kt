@@ -8,8 +8,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import com.heyanle.easybangumi4.plugin.extension.ExtensionInfo
 import com.heyanle.easybangumi4.case.ExtensionCase
+import com.heyanle.easybangumi4.plugin.extension.ExtensionInfo
 import com.heyanle.inject.core.Inject
 
 /**

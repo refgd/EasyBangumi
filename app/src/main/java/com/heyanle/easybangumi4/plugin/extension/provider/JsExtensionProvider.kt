@@ -5,8 +5,6 @@ import com.heyanle.easybangumi4.BuildConfig
 import com.heyanle.easybangumi4.plugin.extension.ExtensionInfo
 import com.heyanle.easybangumi4.plugin.extension.loader.ExtensionLoader
 import com.heyanle.easybangumi4.plugin.extension.loader.ExtensionLoaderFactory
-import com.heyanle.easybangumi4.plugin.js.JsTestProvider
-import com.heyanle.easybangumi4.plugin.js.extension.JSExtensionInnerLoader
 import com.heyanle.easybangumi4.plugin.js.extension.JSExtensionLoader
 import com.heyanle.easybangumi4.plugin.js.runtime.JSRuntimeProvider
 import kotlinx.coroutines.CoroutineDispatcher
@@ -70,13 +68,11 @@ class JsExtensionProvider(
     }
 
     override fun innerAppendExtension(displayName: String, inputStream: InputStream) {
-        fileObserver.stopWatching()
         val fileName = getNameWhenLoad(displayName, System.currentTimeMillis(), atomicLong.getAndIncrement())
         // "${System.currentTimeMillis()}-${atomicLong.getAndIncrement()}${getSuffix()}"
         val cacheFile = File(cacheFolder, fileName)
 
         val targetFileTemp = File(folderPath, "${fileName}.temp")
-        cacheFolderFile.mkdirs()
         cacheFile.createNewFile()
         inputStream.use { input ->
             cacheFile.outputStream().use { out ->
@@ -102,9 +98,6 @@ class JsExtensionProvider(
             cacheFile.copyTo(targetFileTemp)
             targetFileTemp.renameTo(targetFile)
         }
-        cacheFolderFile.deleteRecursively()
-        cacheFolderFile.mkdirs()
-        scanFolder()
-        fileObserver.startWatching()
     }
+
 }

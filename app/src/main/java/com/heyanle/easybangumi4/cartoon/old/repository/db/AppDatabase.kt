@@ -5,14 +5,14 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.heyanle.easybangumi4.Migrate
-import com.heyanle.easybangumi4.cartoon.old.repository.db.dao.CartoonHistoryDao
-import com.heyanle.easybangumi4.cartoon.old.repository.db.dao.CartoonStarDao
-import com.heyanle.easybangumi4.cartoon.old.repository.db.dao.CartoonTagDao
-import com.heyanle.easybangumi4.cartoon.old.repository.db.dao.SearchHistoryDao
 import com.heyanle.easybangumi4.cartoon.old.entity.CartoonHistory
 import com.heyanle.easybangumi4.cartoon.old.entity.CartoonStar
 import com.heyanle.easybangumi4.cartoon.old.entity.CartoonTagOld
 import com.heyanle.easybangumi4.cartoon.old.entity.SearchHistoryOld
+import com.heyanle.easybangumi4.cartoon.old.repository.db.dao.CartoonHistoryDao
+import com.heyanle.easybangumi4.cartoon.old.repository.db.dao.CartoonStarDao
+import com.heyanle.easybangumi4.cartoon.old.repository.db.dao.CartoonTagDao
+import com.heyanle.easybangumi4.cartoon.old.repository.db.dao.SearchHistoryDao
 
 /**
  * Created by HeYanLe on 2023/1/17 0:26.

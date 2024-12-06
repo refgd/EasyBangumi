@@ -44,15 +44,15 @@ import androidx.paging.compose.LazyPagingItems
 import androidx.paging.compose.collectAsLazyPagingItems
 import com.heyanle.easybangumi4.LocalNavController
 import com.heyanle.easybangumi4.navigationDetailed
-import com.heyanle.easybangumi4.source_api.component.page.SourcePage
-import com.heyanle.easybangumi4.source_api.entity.CartoonCover
-import com.heyanle.easybangumi4.source_api.entity.toIdentify
+import com.heyanle.easybangumi4.plugin.api.component.page.SourcePage
+import com.heyanle.easybangumi4.plugin.api.entity.CartoonCover
+import com.heyanle.easybangumi4.plugin.api.entity.toIdentify
 import com.heyanle.easybangumi4.ui.common.CartoonCardWithCover
 import com.heyanle.easybangumi4.ui.common.CartoonCardWithoutCover
 import com.heyanle.easybangumi4.ui.common.PagingCommon
 import com.heyanle.easybangumi4.ui.common.commonShow
-import com.heyanle.easybangumi4.ui.common.pagingCommon
 import com.heyanle.easybangumi4.ui.common.cover_star.CoverStarViewModel
+import com.heyanle.easybangumi4.ui.common.pagingCommon
 
 /**
  * Created by heyanlin on 2024/2/9 10:29.

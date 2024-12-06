@@ -37,10 +37,8 @@ class SourceViewModel : ViewModel() {
     }
 
     fun move(from: Int, to: Int) {
-
         configSourceList = configSourceList.toMutableList().apply {
             add(to, removeAt(from))
-
         }
     }
 

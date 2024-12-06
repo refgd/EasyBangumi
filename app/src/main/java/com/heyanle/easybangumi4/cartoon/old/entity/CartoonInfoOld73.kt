@@ -3,15 +3,9 @@ package com.heyanle.easybangumi4.cartoon.old.entity
 import androidx.room.Entity
 import androidx.room.Ignore
 import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
-import com.heyanle.easybangumi4.source_api.component.detailed.DetailedComponent
-import com.heyanle.easybangumi4.source_api.entity.Cartoon
-import com.heyanle.easybangumi4.source_api.entity.CartoonCover
-import com.heyanle.easybangumi4.source_api.entity.CartoonImpl
-import com.heyanle.easybangumi4.source_api.entity.CartoonSummary
-import com.heyanle.easybangumi4.source_api.entity.PlayLine
-import com.heyanle.easybangumi4.utils.getMatchReg
-import java.net.URLEncoder
+import com.heyanle.easybangumi4.plugin.api.component.detailed.DetailedComponent
+import com.heyanle.easybangumi4.plugin.api.entity.Cartoon
+import com.heyanle.easybangumi4.plugin.api.entity.PlayLine
 
 /**
  * Created by HeYanLe on 2023/8/13 16:29.

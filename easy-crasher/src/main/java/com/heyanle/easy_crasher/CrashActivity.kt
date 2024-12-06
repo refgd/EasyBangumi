@@ -2,9 +2,7 @@ package com.heyanle.easy_crasher
 
 import android.app.Activity
 import android.os.Bundle
-import android.widget.LinearLayout
 import android.widget.TextView
-import org.w3c.dom.Text
 
 /**
  * Created by HeYanLe on 2022/9/4 15:02.

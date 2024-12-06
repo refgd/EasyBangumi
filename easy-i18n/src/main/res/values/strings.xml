@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">纯纯看番</string>
+    <string name="app_name">纯纯看看</string>
 
     <string name="anim">动画</string>
     <string name="watch_anim">看动画</string>
@@ -7,7 +7,7 @@
     <string name="read_novel">看小说</string>
     <string name="setting">设置</string>
 
-    <string name="anim_title">纯纯看番</string>
+    <string name="anim_title">纯纯看看</string>
     <string name="comic_title">纯纯漫画</string>
     <string name="novel_title">纯纯小说</string>
 
@@ -35,6 +35,9 @@
     <string name="now_in_private">当前处于无痕模式</string>
     <string name="in_private">无痕模式</string>
     <string name="in_private_msg">暂停记录观看历史</string>
+
+    <string name="web_server">Web 服务</string>
+    <string name="web_server_msg">用浏览器写源或看番</string>
 
     <string name="appearance_setting">外观设置</string>
     <string name="player_setting">播放设置</string>
@@ -127,7 +130,7 @@
 
     <string name="doing_update">正在更新中</string>
 
-    <string name="easybangumi_too_old">纯纯看番版本过旧，请升级</string>
+    <string name="easybangumi_too_old">纯纯看看版本过旧，请升级</string>
 
     <string name="update_error">更新错误</string>
 
@@ -302,7 +305,7 @@
 
     <string name="delete_confirmation_num">确定要删除该%1$d项吗？</string>
 
-    <string name="delete_confirmation">确定要删除吗？</string>
+    <string name="delete_confirmation">确定要删除""%1$s""吗？</string>
     <string name="clear_confirmation">确定要清空吗？</string>
     
     <string name="qq_chanel">QQ 频道</string>
@@ -475,7 +478,7 @@
 
 
     <!--easy-extension-->
-    <string name="app_too_old">纯纯看番版本过旧</string>
+    <string name="app_too_old">纯纯看看版本过旧</string>
     <string name="extension_too_old">插件版本过旧</string>
     <string name="load_error">加载错误</string>
     <string name="share">分享</string>
@@ -527,11 +530,11 @@
     <string name="welcome">欢迎！</string>
     <string name="setting_first">请先进行一些设置，或者稍后再到设置中调整</string>
 
-    <string name="choose_folder_to_bangumi">选择一个文件夹供纯纯看番存放下载番剧、备份文件等</string>
+    <string name="choose_folder_to_bangumi">选择一个文件夹供纯纯看看存放下载番剧、备份文件等</string>
     <string name="choose_folder_to_bangumi_msg">推荐使用一个专门的文件夹</string>
 
     <string name="current_choose_folder">已选文件夹：%1$s</string>
-    <string name="folder_use_private_msg">卸载纯纯看番后将会删除，同时其他 APP 无法访问。</string>
+    <string name="folder_use_private_msg">卸载纯纯看看后将会删除，同时其他 APP 无法访问。</string>
 
 
     <string name="private_folder">私有目录</string>
@@ -602,7 +605,7 @@
     <string name="local_no_media">本地文件夹添加&#160;.nomedia&#160;文件</string>
     <string name="local_no_media_msg">.nomedia&#160;文件代表你不希望本地番剧出现在相册。具体表现因设备而异，无法控制。</string>
 
-    <string name="private_path_msg">私有目录中的文件无法保存到相册，只能在纯纯看番中查看，卸载后将同步删除。</string>
+    <string name="private_path_msg">私有目录中的文件无法保存到相册，只能在纯纯看看中查看，卸载后将同步删除。</string>
 
     <string name="downloading_max_count">最大同时下载数量（快速模式）</string>
 
@@ -612,8 +615,12 @@
 
     <string name="extension_push">添加 JS 拓展</string>
     <string name="extension_push_from_file">选择文件 (JS)</string>
-    <string name="extension_push_completely">拓展添加完成</string>
-    <string name="extension_push_error">拓展添加错误</string>
+
+    <string name="extension_push_completely">番源添加完成</string>
+    <string name="extension_push_error">番源添加错误</string>
+
+    <string name="insert_local">本地导入</string>
+    <string name="insert_remote">网络导入</string>
 
     <string name="extension_push_from_input">手动输入添加</string>
     <string name="js_file_url">JS 文件 URL</string>
@@ -622,7 +629,7 @@
 
     <string name="js_file_url_desc">请输入 JS 文件 URL （一行一个）</string>
     <string name="js_code_desc">请直接输入 JS 代码</string>
-    <string name="js_repo_desc">请输入 JS 仓库地址</string>
+    <string name="js_repo_desc">请输入JS文件/仓库地址</string>
 
     <string name="succeed">成功</string>
     <string name="download_fail">下载失败</string>

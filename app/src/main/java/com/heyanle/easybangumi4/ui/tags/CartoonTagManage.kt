@@ -51,8 +51,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.heyanle.easy_i18n.R
 import com.heyanle.easybangumi4.LocalNavController
-import com.heyanle.easybangumi4.cartoon.star.isALL
-import com.heyanle.easybangumi4.cartoon.star.isUpdate
 import com.heyanle.easybangumi4.ui.common.EasyDeleteDialog
 import com.heyanle.easybangumi4.ui.common.moeSnackBar
 import com.heyanle.easybangumi4.utils.stringRes

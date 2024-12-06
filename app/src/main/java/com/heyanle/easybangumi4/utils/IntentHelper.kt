@@ -6,13 +6,11 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import androidx.annotation.StringRes
 import androidx.core.app.ActivityCompat
 import androidx.core.content.FileProvider
 import com.heyanle.easybangumi4.BuildConfig
 import com.heyanle.easybangumi4.ui.common.moeSnackBar
 import java.io.File
-import com.heyanle.easybangumi4.R
 
 /**
  * Created by HeYanLe on 2023/5/17 16:04.

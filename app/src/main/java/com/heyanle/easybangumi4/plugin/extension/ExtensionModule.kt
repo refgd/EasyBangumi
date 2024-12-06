@@ -1,12 +1,11 @@
 package com.heyanle.easybangumi4.plugin.extension
 
 import android.app.Application
+import com.heyanle.easybangumi4.plugin.api.extension.IconFactory
 import com.heyanle.easybangumi4.plugin.extension.push.ExtensionPushController
 import com.heyanle.easybangumi4.plugin.js.JSDebugPreference
 import com.heyanle.easybangumi4.utils.getCachePath
 import com.heyanle.easybangumi4.utils.getFilePath
-import com.heyanle.easybangumi4.utils.getInnerFilePath
-import com.heyanle.extension_api.IconFactory
 import com.heyanle.inject.api.InjectModule
 import com.heyanle.inject.api.InjectScope
 import com.heyanle.inject.api.addAlias
@@ -20,15 +19,13 @@ class ExtensionModule(
     private val application: Application
 ) : InjectModule {
 
-    private val extensionPath = application.getInnerFilePath("extension")
     private val extensionCachePath = application.getCachePath("extension")
-
     private val extensionJSPath = application.getFilePath("extension-js")
+
     override fun InjectScope.registerInjectables() {
         addSingletonFactory {
             ExtensionController(
                 application,
-                extensionPath,
                 extensionJSPath,
                 extensionCachePath
             )

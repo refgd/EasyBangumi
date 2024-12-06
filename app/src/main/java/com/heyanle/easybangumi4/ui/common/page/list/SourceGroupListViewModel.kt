@@ -1,15 +1,14 @@
 package com.heyanle.easybangumi4.ui.common.page.list
 
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.cachedIn
-import com.heyanle.easybangumi4.source_api.component.page.SourcePage
-import com.heyanle.easybangumi4.source_api.entity.CartoonCover
+import com.heyanle.easybangumi4.plugin.api.component.page.SourcePage
+import com.heyanle.easybangumi4.plugin.api.entity.CartoonCover
 import com.heyanle.easybangumi4.ui.common.page.paging.ListPagePagingSource
 
 /**

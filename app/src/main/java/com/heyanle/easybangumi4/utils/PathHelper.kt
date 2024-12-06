@@ -2,7 +2,6 @@ package com.heyanle.easybangumi4.utils
 
 import android.content.Context
 import android.content.Context.MODE_PRIVATE
-import android.content.Context.MODE_WORLD_WRITEABLE
 import java.io.File
 
 /**

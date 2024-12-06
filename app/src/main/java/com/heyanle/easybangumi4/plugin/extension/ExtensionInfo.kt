@@ -1,11 +1,10 @@
 package com.heyanle.easybangumi4.plugin.extension
 
 import android.content.res.Resources
-import android.graphics.drawable.Drawable
+import com.heyanle.easybangumi4.plugin.api.Source
+import com.heyanle.easybangumi4.plugin.api.extension.Extension
 import com.heyanle.easybangumi4.plugin.extension.provider.JsExtensionProvider
-import com.heyanle.easybangumi4.source_api.Source
 import com.heyanle.easybangumi4.utils.getMatchReg
-import com.heyanle.extension_api.Extension
 import java.io.File
 
 /**
@@ -21,6 +20,8 @@ sealed class ExtensionInfo {
     abstract val readme: String?
     abstract val icon: Any?
     abstract val loadType: Int
+    abstract val hasPref: Int
+    abstract val hasSearch: Int
     abstract val sourcePath: String // 文件位置 js or apk
     abstract val publicPath: String
     abstract val folderPath: String // 解压路径
@@ -57,6 +58,8 @@ sealed class ExtensionInfo {
         override val readme: String?,
         override val icon: Any?,
         override val loadType: Int,
+        override val hasPref: Int,
+        override val hasSearch: Int,
         override val sourcePath: String,
         override val publicPath: String,
         override val folderPath: String,
@@ -76,6 +79,8 @@ sealed class ExtensionInfo {
         override val readme: String?,
         override val icon: Any?,
         override val loadType: Int,
+        override val hasPref: Int,
+        override val hasSearch: Int,
         override val sourcePath: String,
         override val publicPath: String,
         override val folderPath: String,

@@ -1,18 +1,16 @@
 package com.heyanle.easybangumi4.plugin.js.component
 
+import com.heyanle.easybangumi4.plugin.api.ParserException
+import com.heyanle.easybangumi4.plugin.api.SourceResult
+import com.heyanle.easybangumi4.plugin.api.component.ComponentWrapper
+import com.heyanle.easybangumi4.plugin.api.component.search.SearchComponent
+import com.heyanle.easybangumi4.plugin.api.entity.CartoonCover
+import com.heyanle.easybangumi4.plugin.api.withResult
 import com.heyanle.easybangumi4.plugin.js.runtime.JSScope
 import com.heyanle.easybangumi4.plugin.js.utils.JSFunction
 import com.heyanle.easybangumi4.plugin.js.utils.jsUnwrap
-import com.heyanle.easybangumi4.source_api.ParserException
-import com.heyanle.easybangumi4.source_api.SourceResult
-import com.heyanle.easybangumi4.source_api.component.ComponentWrapper
-import com.heyanle.easybangumi4.source_api.component.search.SearchComponent
-import com.heyanle.easybangumi4.source_api.entity.CartoonCover
-import com.heyanle.easybangumi4.source_api.withResult
 import kotlinx.coroutines.Dispatchers
-import org.mozilla.javascript.Function
 import java.net.URLEncoder
-import java.util.ArrayList
 
 /**
  * Created by heyanle on 2024/7/28.

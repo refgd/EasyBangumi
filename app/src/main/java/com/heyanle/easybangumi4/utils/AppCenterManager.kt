@@ -60,7 +60,7 @@
 //                        modifier = Modifier
 //                            .size(32.dp)
 //                            .clip(CircleShape),
-//                        image = R.mipmap.logo_new,
+//                        image = R.mipmap.logo_n,
 //                        contentDescription = "新版本"
 //                    )
 //                    Spacer(modifier = Modifier.size(4.dp))

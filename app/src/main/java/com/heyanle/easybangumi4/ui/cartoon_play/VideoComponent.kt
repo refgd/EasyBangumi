@@ -64,7 +64,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
@@ -100,7 +99,6 @@ import com.heyanle.easybangumi4.utils.logi
 import com.heyanle.easybangumi4.utils.shareImageText
 import com.heyanle.easybangumi4.utils.shareText
 import com.heyanle.easybangumi4.utils.stringRes
-import com.heyanle.okkv2.core.okkv
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest

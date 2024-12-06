@@ -5,10 +5,10 @@ import android.net.Uri
 import android.util.Base64
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Javascript
+import com.heyanle.easybangumi4.plugin.api.IconSource
+import com.heyanle.easybangumi4.plugin.api.Source
 import com.heyanle.easybangumi4.plugin.js.extension.JSExtensionLoader
 import com.heyanle.easybangumi4.plugin.js.runtime.JSScope
-import com.heyanle.easybangumi4.source_api.IconSource
-import com.heyanle.easybangumi4.source_api.Source
 import java.io.File
 import kotlin.reflect.KClass
 
@@ -27,11 +27,11 @@ class JsSource(
             importPackage(Packages.com.heyanle.easybangumi4.plugin.extension);
             importPackage(Packages.com.heyanle.easybangumi4.plugin.js.runtime);
             importPackage(Packages.com.heyanle.easybangumi4.plugin.js.entity);
-            importPackage(Packages.com.heyanle.easybangumi4.source_api);
-            importPackage(Packages.com.heyanle.easybangumi4.source_api.utils.api);
-            importPackage(Packages.com.heyanle.easybangumi4.source_api.entity);
+            importPackage(Packages.com.heyanle.easybangumi4.plugin.api);
+            importPackage(Packages.com.heyanle.easybangumi4.plugin.api.utils.api);
+            importPackage(Packages.com.heyanle.easybangumi4.plugin.api.entity);
             importPackage(Packages.com.heyanle.easybangumi4.plugin.js.utils);
-            importPackage(Packages.com.heyanle.easybangumi4.source_api.component.preference);
+            importPackage(Packages.com.heyanle.easybangumi4.plugin.api.component.preference);
             
             importPackage(Packages.kotlin.text);
             importPackage(Packages.kotlin);
@@ -145,7 +145,12 @@ class JsSource(
         get() = map.get(JSExtensionLoader.JS_SOURCE_TAG_VERSION_NAME) ?: ""
     override val versionCode: Int
         get() = map.get(JSExtensionLoader.JS_SOURCE_TAG_VERSION_CODE)?.toIntOrNull() ?: 0
-
+    override val hasPref: Int
+        get() = map.get(JSExtensionLoader.JS_SOURCE_HAS_PREF)?.toIntOrNull() ?: 0
+    override val hasSearch: Int
+        get() = map.get(JSExtensionLoader.JS_SOURCE_HAS_SEARCH)?.toIntOrNull() ?: 0
+    override val sourcePath: String
+        get() = map.get("sourcePath") ?: ""
 
 
     // 轻量级插件的业务注册交给 JSComponentBundle 处理

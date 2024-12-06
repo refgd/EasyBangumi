@@ -49,22 +49,14 @@ class ExtensionPushController(
     }
 
     private val cacheFolder = context.getCachePath("extension_js_push")
-
-    private val pushFromFileUrl = PushFromFileUrl(cacheFolder, extensionController)
-    private val pushFromCode = PushFromCode(cacheFolder, extensionController)
-    private val pushFromRepo = PushFromRepo(cacheFolder, extensionController)
-    private val taskMap = mapOf(
-        pushFromFileUrl.identify() to pushFromFileUrl,
-        pushFromCode.identify() to pushFromCode,
-        pushFromRepo.identify() to pushFromRepo,
-    )
+    private val pushFromUrl = PushFromUrl(cacheFolder, extensionController)
 
     data class State (
         val isDoing: Boolean = false,
         val isError: Boolean = false,
         val isCompletely: Boolean = false,
         val currentJob: Job? = null,
-        val currentParam: ExtensionPushTask.Param? = null,
+        val currentUrl: String? = null,
         val loadingMsg: String = "",
         val errorMsg: String = "",
         val completelyMsg: String = "",
@@ -73,6 +65,8 @@ class ExtensionPushController(
     val state = _state.asStateFlow()
 
     fun cleanErrorOrCompletely() {
+        extensionController.scanFolder()
+
         _state.update {
             it.currentJob?.cancel()
             it.copy(
@@ -85,8 +79,8 @@ class ExtensionPushController(
     }
 
 
-    fun push(param: ExtensionPushTask.Param){
-        val job = scope.launch { innerInvoke(param) }
+    fun push(url: String){
+        val job = scope.launch { innerInvoke(url) }
         while (true) {
             val current = _state.value
             val n = current.copy(
@@ -94,7 +88,7 @@ class ExtensionPushController(
                 isError = false,
                 isCompletely = false,
                 currentJob = job,
-                currentParam = param
+                currentUrl = url
             )
             if (_state.compareAndSet(current, n)) {
                 current.currentJob?.cancel()
@@ -103,10 +97,9 @@ class ExtensionPushController(
         }
     }
 
-    private suspend fun innerInvoke(param: ExtensionPushTask.Param) {
-        val task = taskMap[param.identify] ?: return
+    private suspend fun innerInvoke(url: String) {
         scope.launch {
-            task.invoke(this, param, container)
+            pushFromUrl.invoke(this, url, container)
         }
     }
 

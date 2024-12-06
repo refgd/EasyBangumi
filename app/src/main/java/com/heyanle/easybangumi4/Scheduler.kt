@@ -4,14 +4,15 @@ import android.app.Application
 import android.util.Base64
 import com.heyanle.easy_crasher.CrashHandler
 import com.heyanle.easybangumi4.cartoon.CartoonModule
-import com.heyanle.easybangumi4.exo.MediaModule
 import com.heyanle.easybangumi4.case.CaseModule
 import com.heyanle.easybangumi4.crash.SourceCrashController
 import com.heyanle.easybangumi4.dlna.DlnaModule
+import com.heyanle.easybangumi4.exo.MediaModule
+import com.heyanle.easybangumi4.plugin.api.extension.IconFactory
+import com.heyanle.easybangumi4.plugin.api.extension.iconFactory
 import com.heyanle.easybangumi4.plugin.extension.ExtensionModule
-import com.heyanle.easybangumi4.setting.SettingModule
 import com.heyanle.easybangumi4.plugin.source.SourceModule
-import com.heyanle.easybangumi4.plugin.source.utils.NativeHelperImpl
+import com.heyanle.easybangumi4.setting.SettingModule
 import com.heyanle.easybangumi4.splash.SplashActivity
 import com.heyanle.easybangumi4.storage.StorageModule
 import com.heyanle.easybangumi4.ui.common.dismiss
@@ -21,17 +22,12 @@ import com.heyanle.easybangumi4.utils.exo_ssl.CropUtil
 import com.heyanle.easybangumi4.utils.exo_ssl.TrustAllHostnameVerifier
 import com.heyanle.easybangumi4.utils.getCachePath
 import com.heyanle.easybangumi4.utils.stringRes
-import com.heyanle.extension_api.IconFactory
-import com.heyanle.extension_api.iconFactory
 import com.heyanle.inject.api.get
 import com.heyanle.inject.core.Inject
 import com.heyanle.okkv2.MMKVStore
 import com.heyanle.okkv2.core.Okkv
 import com.heyanle.okkv2.core.okkv
 import com.tencent.bugly.crashreport.CrashReport
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.MainScope
-import kotlinx.coroutines.launch
 import java.io.File
 import javax.net.ssl.HttpsURLConnection
 
@@ -81,7 +77,6 @@ object Scheduler {
         SourceModule(application).registerWith(Inject)
         StorageModule(application).registerWith(Inject)
         DlnaModule(application).registerWith(Inject)
-        Inject.get<NativeHelperImpl>()
         initOkkv(application)
         initBugly(application)
         initAria(application)
@@ -113,7 +108,7 @@ object Scheduler {
             """.trimIndent().replace("=", "/").replace("-", "+")
                 Base64.decode(firstAnnoBase, Base64.DEFAULT).toString(Charsets.UTF_8).moeDialogAlert(
                     stringRes(com.heyanle.easy_i18n.R.string.first_anno),
-                    dismissLabel = stringRes(com.heyanle.easy_i18n.R.string.cancel),
+                    dismissLabel = stringRes(com.heyanle.easy_i18n.R.string.confirm),
                     onDismiss = {
                         it.dismiss()
                     }
@@ -126,25 +121,25 @@ object Scheduler {
     }
 
     fun runOnComposeLaunch(activity: MainActivity) {
-        if (first != BuildConfig.VERSION_CODE) {
-            try {
-                // 更新日志
-                val scope = MainScope()
-                scope.launch(Dispatchers.IO) {
-                    activity.assets?.open("update_log.txt")?.bufferedReader()?.use {
-                        it.readText().moeDialogAlert(
-                            stringRes(com.heyanle.easy_i18n.R.string.version) + ": " + BuildConfig.VERSION_NAME,
-                            dismissLabel = stringRes(com.heyanle.easy_i18n.R.string.cancel),
-                            onDismiss = {
-                                it.dismiss()
-                            }
-                        )
-                    }
-                }
-            }catch (e: Throwable){
-                e.printStackTrace()
-            }
-        }
+//        if (first != BuildConfig.VERSION_CODE) {
+//            try {
+//                // 更新日志
+//                val scope = MainScope()
+//                scope.launch(Dispatchers.IO) {
+//                    activity.assets?.open("update_log.txt")?.bufferedReader()?.use {
+//                        it.readText().moeDialogAlert(
+//                            stringRes(com.heyanle.easy_i18n.R.string.version) + ": " + BuildConfig.VERSION_NAME,
+//                            dismissLabel = stringRes(com.heyanle.easy_i18n.R.string.confirm),
+//                            onDismiss = {
+//                                it.dismiss()
+//                            }
+//                        )
+//                    }
+//                }
+//            }catch (e: Throwable){
+//                e.printStackTrace()
+//            }
+//        }
         first = BuildConfig.VERSION_CODE
     }
 

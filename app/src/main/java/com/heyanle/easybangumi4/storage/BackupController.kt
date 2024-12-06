@@ -6,11 +6,11 @@ import com.heyanle.easybangumi4.APP
 import com.heyanle.easybangumi4.BuildConfig
 import com.heyanle.easybangumi4.base.hekv.HeKV
 import com.heyanle.easybangumi4.cartoon.repository.db.dao.CartoonInfoDao
+import com.heyanle.easybangumi4.plugin.api.Source
+import com.heyanle.easybangumi4.plugin.api.utils.api.PreferenceHelper
 import com.heyanle.easybangumi4.plugin.extension.ExtensionInfo
 import com.heyanle.easybangumi4.setting.SettingMMKVPreferences
 import com.heyanle.easybangumi4.setting.SettingPreferences
-import com.heyanle.easybangumi4.source_api.Source
-import com.heyanle.easybangumi4.source_api.utils.api.PreferenceHelper
 import com.heyanle.easybangumi4.storage.entity.CartoonStorage
 import com.heyanle.easybangumi4.ui.common.moeDialogAlert
 import com.heyanle.easybangumi4.utils.getCachePath

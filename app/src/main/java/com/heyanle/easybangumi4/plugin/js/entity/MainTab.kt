@@ -1,8 +1,5 @@
 package com.heyanle.easybangumi4.plugin.js.entity
 
-import java.util.ArrayList
-import java.util.Objects
-
 class MainTab (
     val label: String,
     val type: Int,

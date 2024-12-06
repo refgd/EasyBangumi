@@ -4,22 +4,23 @@ import android.graphics.drawable.Drawable
 import androidx.core.content.res.ResourcesCompat
 import com.heyanle.easybangumi4.APP
 import com.heyanle.easybangumi4.R
+import com.heyanle.easybangumi4.plugin.api.Source
+import com.heyanle.easybangumi4.plugin.api.extension.ExtensionIconSource
 import com.heyanle.easybangumi4.utils.stringRes
-import com.heyanle.extension_api.ExtensionIconSource
 import kotlin.reflect.KClass
 
 /**
  * Created by heyanle on 2024/7/7.
  * https://github.com/heyanLE
  */
-object LocalSource: ExtensionIconSource {
+object LocalSource: Source, ExtensionIconSource {
 
     const val LOCAL_SOURCE_KEY = "easybangumi_local"
 
     override fun getIconResourcesId(): Int? = null
     override fun getIconFactory(): () -> Drawable? {
         return {
-            ResourcesCompat.getDrawable(APP.resources, R.mipmap.logo_new, null)
+            ResourcesCompat.getDrawable(APP.resources, R.mipmap.logo_n, null)
         }
     }
 
@@ -33,6 +34,12 @@ object LocalSource: ExtensionIconSource {
         get() = "1.0.0"
     override val versionCode: Int
         get() = 0
+    override val hasPref: Int
+        get() = 0
+    override val hasSearch: Int
+        get() = 0
+    override val sourcePath: String
+        get() = ""
 
     override fun register(): List<KClass<*>> {
         return listOf(

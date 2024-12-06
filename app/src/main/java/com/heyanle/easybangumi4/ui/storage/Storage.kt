@@ -184,7 +184,7 @@ fun Storage() {
                                 },
                                 leadingContent = {
                                     OkImage(
-                                        image =  R.mipmap.logo_new,
+                                        image =  R.mipmap.logo_n,
                                         modifier = Modifier.size(40.dp),
                                         contentDescription = stringResource(id = com.heyanle.easy_i18n.R.string.cartoon_data)
                                     )

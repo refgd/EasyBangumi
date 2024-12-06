@@ -6,9 +6,9 @@ import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import com.heyanle.easybangumi4.WEB_VIEW_USER
 import com.heyanle.easybangumi4.navControllerRef
+import com.heyanle.easybangumi4.plugin.api.utils.api.WebViewHelperV2
+import com.heyanle.easybangumi4.plugin.api.utils.api.WebViewHelperV2.RenderedResult
 import com.heyanle.easybangumi4.plugin.source.utils.LightweightGettingWebViewClient
-import com.heyanle.easybangumi4.source_api.utils.api.WebViewHelperV2
-import com.heyanle.easybangumi4.source_api.utils.api.WebViewHelperV2.RenderedResult
 import com.heyanle.easybangumi4.utils.WebViewManager
 import com.heyanle.easybangumi4.utils.clearWeb
 import com.heyanle.easybangumi4.utils.evaluateJavascript

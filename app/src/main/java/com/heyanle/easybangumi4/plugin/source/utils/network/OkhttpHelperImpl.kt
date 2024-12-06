@@ -1,15 +1,14 @@
 package com.heyanle.easybangumi4.plugin.source.utils.network
 
 import android.content.Context
-import android.os.Build
 import com.heyanle.easybangumi4.BuildConfig
+import com.heyanle.easybangumi4.plugin.api.utils.api.NetworkHelper
+import com.heyanle.easybangumi4.plugin.api.utils.api.OkhttpHelper
+import com.heyanle.easybangumi4.plugin.api.utils.api.WebViewHelper
 import com.heyanle.easybangumi4.plugin.source.utils.network.interceptor.CloudflareInterceptor
 import com.heyanle.easybangumi4.plugin.source.utils.network.interceptor.CloudflareUserInterceptor
 import com.heyanle.easybangumi4.plugin.source.utils.network.interceptor.CookieInterceptor
 import com.heyanle.easybangumi4.plugin.source.utils.network.interceptor.UserAgentInterceptor
-import com.heyanle.easybangumi4.source_api.utils.api.NetworkHelper
-import com.heyanle.easybangumi4.source_api.utils.api.OkhttpHelper
-import com.heyanle.easybangumi4.source_api.utils.api.WebViewHelper
 import okhttp3.Cache
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor

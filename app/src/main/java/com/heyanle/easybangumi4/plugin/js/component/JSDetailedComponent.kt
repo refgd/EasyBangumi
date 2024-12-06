@@ -1,19 +1,18 @@
 package com.heyanle.easybangumi4.plugin.js.component
 
+import com.heyanle.easybangumi4.plugin.api.ParserException
+import com.heyanle.easybangumi4.plugin.api.SourceResult
+import com.heyanle.easybangumi4.plugin.api.component.ComponentWrapper
+import com.heyanle.easybangumi4.plugin.api.component.detailed.DetailedComponent
+import com.heyanle.easybangumi4.plugin.api.entity.Cartoon
+import com.heyanle.easybangumi4.plugin.api.entity.CartoonSummary
+import com.heyanle.easybangumi4.plugin.api.entity.PlayLine
+import com.heyanle.easybangumi4.plugin.api.withResult
 import com.heyanle.easybangumi4.plugin.js.runtime.JSScope
 import com.heyanle.easybangumi4.plugin.js.utils.JSFunction
 import com.heyanle.easybangumi4.plugin.js.utils.jsUnwrap
-import com.heyanle.easybangumi4.source_api.ParserException
-import com.heyanle.easybangumi4.source_api.SourceResult
-import com.heyanle.easybangumi4.source_api.component.ComponentWrapper
-import com.heyanle.easybangumi4.source_api.component.detailed.DetailedComponent
-import com.heyanle.easybangumi4.source_api.entity.Cartoon
-import com.heyanle.easybangumi4.source_api.entity.CartoonSummary
-import com.heyanle.easybangumi4.source_api.entity.PlayLine
-import com.heyanle.easybangumi4.source_api.withResult
 import com.heyanle.easybangumi4.utils.logi
 import kotlinx.coroutines.Dispatchers
-import org.mozilla.javascript.Function
 
 /**
  * Created by heyanle on 2024/7/28.

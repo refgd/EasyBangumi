@@ -6,12 +6,8 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.heyanle.easybangumi4.cartoon.entity.CartoonTag
-import com.heyanle.easybangumi4.cartoon.old.entity.CartoonTagOld
 import com.heyanle.easybangumi4.cartoon.repository.db.dao.CartoonInfoDao
 import com.heyanle.easybangumi4.cartoon.star.CartoonStarController
-import com.heyanle.easybangumi4.cartoon.star.CartoonTagsController
-import com.heyanle.easybangumi4.cartoon.star.isALL
-import com.heyanle.easybangumi4.cartoon.star.isUpdate
 import com.heyanle.inject.core.Inject
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.map

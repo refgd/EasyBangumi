@@ -6,7 +6,6 @@ import androidx.annotation.RequiresApi
 import com.heyanle.easybangumi4.plugin.extension.ExtensionInfo
 import com.heyanle.easybangumi4.plugin.extension.loader.ExtensionLoader
 import com.heyanle.easybangumi4.utils.TimeLogUtils
-import com.heyanle.easybangumi4.utils.logi
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -64,7 +63,6 @@ abstract class AbsFolderExtensionProvider(
             }else {
                 emptyList()
             } ?: emptyList()
-
 
             val extensionInfos = coverExtensionLoaderList(loadExtensionLoader(fileList)).map {
                 it.load()
@@ -179,7 +177,6 @@ abstract class AbsFolderExtensionProvider(
         ) {
 
         override fun onEvent(event: Int, path: String?) {
-            "${event} ${path} onEvent".logi(FileApkExtensionProvider.TAG)
             if (event and DELETE == DELETE || event and DELETE_SELF == DELETE_SELF || path != null) {
                 this@AbsFolderExtensionProvider.onEvent(event, path ?: "")
             }
@@ -192,7 +189,6 @@ abstract class AbsFolderExtensionProvider(
             DELETE_SELF or DELETE
         ) {
         override fun onEvent(event: Int, path: String?) {
-            "${event} ${path} onEvent".logi(FileApkExtensionProvider.TAG)
             if (event and DELETE == DELETE || event and DELETE_SELF == DELETE_SELF || path != null) {
                 this@AbsFolderExtensionProvider.onEvent(event, path ?: "")
             }

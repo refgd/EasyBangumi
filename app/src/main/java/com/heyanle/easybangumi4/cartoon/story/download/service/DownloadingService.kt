@@ -46,7 +46,7 @@ class DownloadingService: Service() {
                 notification = Notification.Builder(this, "easybangumi")
                     .setContentTitle(stringRes(com.heyanle.easy_i18n.R.string.app_name))
                     .setContentText(stringRes(com.heyanle.easy_i18n.R.string.downloading))
-                    .setSmallIcon(R.mipmap.logo_new)
+                    .setSmallIcon(R.mipmap.logo_n)
                     .setContentIntent(pendingIntent)
                     .setTicker(stringRes(com.heyanle.easy_i18n.R.string.downloading))
                     .build()

@@ -2,18 +2,14 @@ package com.heyanle.easybangumi4.ui.main.star
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.heyanle.easybangumi4.cartoon.CartoonUpdateController
 import com.heyanle.easybangumi4.cartoon.entity.CartoonInfo
+import com.heyanle.easybangumi4.cartoon.entity.CartoonTag
 import com.heyanle.easybangumi4.cartoon.repository.db.dao.CartoonInfoDao
+import com.heyanle.easybangumi4.cartoon.star.CartoonStarController
 import com.heyanle.easybangumi4.cartoon.star.CartoonTagsController
 import com.heyanle.easybangumi4.setting.SettingPreferences
-import com.heyanle.easybangumi4.cartoon.CartoonUpdateController
-import com.heyanle.easybangumi4.cartoon.entity.CartoonTag
-import com.heyanle.easybangumi4.cartoon.star.CartoonStarController
 import com.heyanle.easybangumi4.ui.common.moeSnackBar
-import com.heyanle.easybangumi4.ui.common.proc.FilterState
-import com.heyanle.easybangumi4.ui.common.proc.FilterWith
-import com.heyanle.easybangumi4.ui.common.proc.SortBy
-import com.heyanle.easybangumi4.ui.common.proc.SortState
 import com.heyanle.easybangumi4.utils.loge
 import com.heyanle.easybangumi4.utils.stringRes
 import com.heyanle.inject.core.Inject

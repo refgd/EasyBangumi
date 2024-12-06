@@ -2,12 +2,8 @@ package com.heyanle.easybangumi4.plugin.extension
 
 import android.content.Context
 import android.net.Uri
-import androidx.core.net.toUri
-import com.heyanle.easybangumi4.APP
 import com.heyanle.easybangumi4.crash.SourceCrashController
-import com.heyanle.easybangumi4.plugin.extension.provider.FileApkExtensionProvider
 import com.heyanle.easybangumi4.plugin.extension.provider.JsExtensionProvider
-import com.heyanle.easybangumi4.plugin.extension.provider.InstalledAppExtensionProvider
 import com.heyanle.easybangumi4.plugin.js.runtime.JSRuntimeProvider
 import com.hippo.unifile.UniFile
 import kotlinx.coroutines.CoroutineScope
@@ -31,10 +27,8 @@ import java.io.IOException
  */
 class ExtensionController(
     private val context: Context,
-    val apkFileExtensionFolder: String,
     val jsExtensionFolder: String,
     private val cacheFolder: String,
-    //private val extensionLoader: ExtensionLoader
 ) {
 
     companion object {
@@ -59,24 +53,6 @@ class ExtensionController(
 
     // ============================ 插件 Provider ============================
 
-    // 已安装 apk
-    private val installedAppExtensionProvider: InstalledAppExtensionProvider by lazy {
-        InstalledAppExtensionProvider(
-            context,
-            dispatcher
-        )
-    }
-
-    // 文件夹里的 apk
-    private val fileApkExtensionProvider: FileApkExtensionProvider by lazy {
-        FileApkExtensionProvider(
-            context,
-            apkFileExtensionFolder,
-            dispatcher,
-            cacheFolder
-        )
-    }
-
     // js 文件
     private val jsRuntimeProvider = JSRuntimeProvider(2)
     private val jsExtensionProvider: JsExtensionProvider by lazy {
@@ -92,20 +68,16 @@ class ExtensionController(
 
     fun init() {
         SourceCrashController.onExtensionStart()
-        installedAppExtensionProvider.init()
-        fileApkExtensionProvider.init()
         jsExtensionProvider.init()
         SourceCrashController.onExtensionEnd()
 
         scope.launch {
             combine(
-                installedAppExtensionProvider.flow,
-                fileApkExtensionProvider.flow,
                 jsExtensionProvider.flow
-            ) { installedAppExtensionProviderState, fileApkExtensionProviderState, fileJsExtensionProviderState ->
+            ) { (fileJsExtensionProviderState) ->
                 // 首次必须所有 Provider 都加载完才算加载完
                 if (firstLoad &&
-                    (installedAppExtensionProviderState.loading || fileApkExtensionProviderState.loading || fileJsExtensionProviderState.loading)) {
+                    (fileJsExtensionProviderState.loading)) {
                     return@combine ExtensionState(
                         loading = true,
                         extensionInfoMap = emptyMap()
@@ -113,17 +85,11 @@ class ExtensionController(
                 }
                 firstLoad = false
                 val map = mutableMapOf<String, ExtensionInfo>()
-                installedAppExtensionProviderState.extensionMap.forEach {
-                    map[it.key] = it.value
-                }
-                fileApkExtensionProviderState.extensionMap.forEach {
-                    map[it.key] = it.value
-                }
                 fileJsExtensionProviderState.extensionMap.forEach {
                     map[it.key] = it.value
                 }
                 ExtensionState(
-                    loading = installedAppExtensionProviderState.loading && fileApkExtensionProviderState.loading && fileJsExtensionProviderState.loading,
+                    loading = fileJsExtensionProviderState.loading,
                     extensionInfoMap = map
                 )
             }.collectLatest { ext ->
@@ -135,9 +101,12 @@ class ExtensionController(
 
     }
 
+    fun scanFolder() {
+        jsExtensionProvider.scanFolder()
+    }
+
     suspend fun <R> withNoWatching(isScan: Boolean = true, block:suspend  ()-> R): R? {
         jsExtensionProvider.stopWatching()
-        fileApkExtensionProvider.stopWatching()
         val r = try {
             block()
         } catch (e: Throwable) {
@@ -145,11 +114,9 @@ class ExtensionController(
             null
         }
         jsExtensionProvider.startWatching()
-        fileApkExtensionProvider.startWatching()
 
         if (isScan) {
             jsExtensionProvider.scanFolder()
-            fileApkExtensionProvider.scanFolder()
         }
         return r
     }
@@ -167,8 +134,6 @@ class ExtensionController(
                 val name = uniFile.name ?: ""
                 if (JsExtensionProvider.isEndWithJsExtensionSuffix(name) || type == ExtensionInfo.TYPE_JS_FILE) {
                     jsExtensionProvider.appendExtensionStream(name, uniFile.openInputStream())
-                } else if (name.endsWith(FileApkExtensionProvider.EXTENSION_SUFFIX) || type == ExtensionInfo.TYPE_APK_FILE) {
-                    fileApkExtensionProvider.appendExtensionStream(name, uniFile.openInputStream())
                 } else {
                     return@withContext IOException("不支持的文件类型")
                 }
@@ -190,8 +155,6 @@ class ExtensionController(
                 val name = file.name ?: ""
                 if (JsExtensionProvider.isEndWithJsExtensionSuffix(name) || type == ExtensionInfo.TYPE_JS_FILE) {
                     jsExtensionProvider.appendExtensionStream(name, file.inputStream())
-                } else if (name.endsWith(FileApkExtensionProvider.EXTENSION_SUFFIX) || type == ExtensionInfo.TYPE_APK_FILE) {
-                    fileApkExtensionProvider.appendExtensionStream(name, file.inputStream())
                 } else {
                     return@withContext IOException("不支持的文件类型")
                 }
@@ -216,8 +179,6 @@ class ExtensionController(
 
                 if (JsExtensionProvider.isEndWithJsExtensionSuffix(file.name)) {
                     jsExtensionProvider.appendExtensionPath(path)
-                } else if (file.name.endsWith(FileApkExtensionProvider.EXTENSION_SUFFIX)) {
-                    fileApkExtensionProvider.appendExtensionPath(path)
                 } else {
                     callback?.invoke(IOException("不支持的文件类型"))
                 }
@@ -228,8 +189,4 @@ class ExtensionController(
             }
         }
     }
-
-
-
-
 }

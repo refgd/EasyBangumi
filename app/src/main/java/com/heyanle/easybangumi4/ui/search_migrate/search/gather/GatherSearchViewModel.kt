@@ -7,13 +7,14 @@ import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
-import com.heyanle.easybangumi4.source_api.component.search.SearchComponent
-import com.heyanle.easybangumi4.source_api.entity.CartoonCover
+import com.heyanle.easybangumi4.plugin.api.component.search.SearchComponent
+import com.heyanle.easybangumi4.plugin.api.entity.CartoonCover
+import com.heyanle.easybangumi4.plugin.source.SourceInfo
+import com.heyanle.easybangumi4.plugin.source.bundle.getComponentProxy
 import com.heyanle.easybangumi4.ui.search_migrate.PagingSearchSource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -21,7 +22,7 @@ import kotlinx.coroutines.launch
  * Created by heyanlin on 2023/12/18.
  */
 class GatherSearchViewModel(
-    private val searchComponents: List<SearchComponent>
+    private val sourceInfos: List<SourceInfo.Loaded>
 ): ViewModel() {
 
     data class GatherSearchItem(
@@ -47,11 +48,17 @@ class GatherSearchViewModel(
             }
             curKeyWord = searchKey
             _searchItemList.update {
-                searchComponents.map {
-                    GatherSearchItem(
-                        it,
-                        getPager(searchKey, it).flow.cachedIn(viewModelScope)
-                    )
+                sourceInfos.mapNotNull {
+                    if(it.source.hasSearch == 1){
+                        it.componentBundle.getComponentProxy<SearchComponent>()?.let { component ->
+                            GatherSearchItem(
+                                component,
+                                getPager(searchKey, component).flow.cachedIn(viewModelScope)
+                            )
+                        }
+                    }else{
+                        null
+                    }
                 }
             }
 
@@ -75,7 +82,7 @@ class GatherSearchViewModel(
 }
 
 class GatherSearchViewModelFactory(
-    private val searchComponents: List<SearchComponent>
+    private val searchComponents: List<SourceInfo.Loaded>
 ) : ViewModelProvider.Factory {
 
     @Suppress("UNCHECKED_CAST")
