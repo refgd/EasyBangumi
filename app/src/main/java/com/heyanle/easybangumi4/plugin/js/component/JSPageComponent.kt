@@ -75,6 +75,7 @@ class JSPageComponent(
                 )
             }
         }
+
         return mainTabList.map { mainTab2SourcePage(it) }.apply {
             this.logi("JSPageComponent")
         }

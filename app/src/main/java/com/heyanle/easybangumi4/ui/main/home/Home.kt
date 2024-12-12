@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -50,6 +51,7 @@ import com.heyanle.easybangumi4.LocalNavController
 import com.heyanle.easybangumi4.navigationSearch
 import com.heyanle.easybangumi4.plugin.js.source.getIconWithAsyncOrDrawable
 import com.heyanle.easybangumi4.plugin.source.LocalSourceBundleController
+import com.heyanle.easybangumi4.ui.common.ErrorPage
 import com.heyanle.easybangumi4.ui.common.OkImage
 import com.heyanle.easybangumi4.ui.common.page.CartoonPageListTab
 import com.heyanle.easybangumi4.ui.common.page.CartoonPageUI
@@ -128,30 +130,39 @@ fun Home() {
 
             HorizontalDivider()
         }
-        
-        AnimatedContent(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .let {
-                    if (!state.isShowLabel) {
-                        it.nestedScroll(scrollBehavior.nestedScrollConnection)
-                    } else {
-                        it
+
+        if (state.showError) {
+            ErrorPage(
+                modifier = Modifier
+                    .fillMaxSize(),
+                errorMsg = state.errMsg,
+                clickEnable = false
+            )
+        }else{
+            AnimatedContent(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .let {
+                        if (!state.isShowLabel) {
+                            it.nestedScroll(scrollBehavior.nestedScrollConnection)
+                        } else {
+                            it
+                        }
+                    },
+                targetState = kotlin.runCatching { state.pages[state.selectionIndex] }.getOrNull(),
+                transitionSpec = {
+                    fadeIn(animationSpec = tween(300, delayMillis = 300)) togetherWith
+                            fadeOut(animationSpec = tween(300, delayMillis = 0))
+                }, label = ""
+            ) {
+                it?.let {
+                    val listVmOwner = vm.getViewModelStoreOwner(it)
+                    CompositionLocalProvider(
+                        LocalViewModelStoreOwner provides listVmOwner
+                    ) {
+                        CartoonPageUI(cartoonPage = it)
                     }
-                },
-            targetState = kotlin.runCatching { state.pages[state.selectionIndex] }.getOrNull(),
-            transitionSpec = {
-                fadeIn(animationSpec = tween(300, delayMillis = 300)) togetherWith
-                        fadeOut(animationSpec = tween(300, delayMillis = 0))
-            }, label = ""
-        ) {
-            it?.let {
-                val listVmOwner = vm.getViewModelStoreOwner(it)
-                CompositionLocalProvider(
-                    LocalViewModelStoreOwner provides listVmOwner
-                ) {
-                    CartoonPageUI(cartoonPage = it)
                 }
             }
         }

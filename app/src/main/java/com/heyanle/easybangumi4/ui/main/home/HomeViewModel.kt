@@ -33,6 +33,8 @@ class HomeViewModel : ViewModel() {
 
     data class HomeState(
         val isLoading: Boolean = true,
+        val showError: Boolean = false,
+        val errMsg: String = "",
         val pages: List<SourcePage> = emptyList(),
         val selectionIndex: Int = 0,
         //val selectionPage: SourcePage? = null,
@@ -57,32 +59,46 @@ class HomeViewModel : ViewModel() {
                     _stateFlow.update {
                         it.copy(
                             isLoading = false,
+                            showError = false,
                             pages = emptyList(),
                             topAppBarTitle = ""
                         )
                     }
                 } else {
                     selectionKeyOkkv = pa.source.key
-                    var index = -1
-                    val pages = pa.getPages()
-                    for (i in pages.indices) {
-                        if (!pages[i].newScreen) {
-                            index = i
-                            break
+                    kotlin.runCatching {
+                        var index = -1
+                        val pages = pa.getPages()
+                        for (i in pages.indices) {
+                            if (!pages[i].newScreen) {
+                                index = i
+                                break
+                            }
                         }
-                    }
-                    _stateFlow.update {
-                        val realIndex =
-                            if (it.selectionIndex >= 0 && it.selectionIndex < pages.size && !pages[it.selectionIndex].newScreen)
-                                it.selectionIndex else index
-                        it.copy(
-                            isLoading = false,
-                            pages = pages,
-                            selectionKey = pa.source.key,
-                            isShowLabel = pages !is PageComponent.NonLabelSinglePage,
-                            topAppBarTitle = pa.source.label,
-                            selectionIndex = realIndex
-                        )
+                        _stateFlow.update {
+                            val realIndex =
+                                if (it.selectionIndex >= 0 && it.selectionIndex < pages.size && !pages[it.selectionIndex].newScreen)
+                                    it.selectionIndex else index
+                            it.copy(
+                                isLoading = false,
+                                showError = false,
+                                pages = pages,
+                                selectionKey = pa.source.key,
+                                isShowLabel = pages !is PageComponent.NonLabelSinglePage,
+                                topAppBarTitle = pa.source.label,
+                                selectionIndex = realIndex
+                            )
+                        }
+                    }.onFailure { err ->
+                        _stateFlow.update {
+                            it.copy(
+                                isLoading = false,
+                                showError = true,
+                                errMsg = err.localizedMessage ?: "Error",
+                                pages = emptyList(),
+                                topAppBarTitle = pa.source.label,
+                            )
+                        }
                     }
                 }
             }
