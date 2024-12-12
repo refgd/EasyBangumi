@@ -3,6 +3,8 @@ package com.heyanle.easybangumi4.plugin.js.utils;
 
 import android.util.Log;
 
+import com.heyanle.easybangumi4.plugin.source.Debug;
+
 /**
  * Created by HeYanLe on 2024/11/3 21:42.
  * https://github.com/heyanLE

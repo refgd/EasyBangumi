@@ -38,7 +38,7 @@ fun ColumnScope.SampleGuildHeader() {
             .size(64.dp)
             .align(Alignment.Start),
         image = R.mipmap.logo_n,
-        contentDescription = stringResource(com.heyanle.easy_i18n.R.string.app_name)
+        contentDescription = stringResource(com.heyanle.easy_i18n.R.string.the_app_name)
     )
 
     ListItem(

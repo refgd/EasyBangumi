@@ -29,11 +29,10 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.heyanle.easybangumi4.ABOUT
@@ -48,6 +47,7 @@ import com.heyanle.easybangumi4.setting.SettingPreferences
 import com.heyanle.easybangumi4.ui.common.BooleanPreferenceItem
 import com.heyanle.easybangumi4.ui.common.OkImage
 import com.heyanle.easybangumi4.ui.setting.SettingPage
+import com.heyanle.easybangumi4.web.services.WebService
 import com.heyanle.inject.core.Inject
 
 /**
@@ -61,7 +61,8 @@ fun More() {
     val nav = LocalNavController.current
 
     val settingPreferences: SettingPreferences by Inject.injectLazy()
-    var webEnabled by remember { mutableStateOf(false) }
+    val webEnabled by remember { WebService.isRun }
+    val ctx = LocalContext.current
 
     Column(
         modifier = Modifier
@@ -156,13 +157,23 @@ fun More() {
             },
             subtitle = {
                 Text(
-                    text = stringResource(id = com.heyanle.easy_i18n.R.string.web_server_msg),
+                    text = if (webEnabled) {
+                        WebService.hostAddress
+                    } else {
+                        stringResource(com.heyanle.easy_i18n.R.string.web_server_msg)
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             },
             isChecked = webEnabled,
-            onCheckedChange = { webEnabled = it }
+            onCheckedChange = {
+                if(webEnabled){
+                    WebService.stop(ctx)
+                }else{
+                    WebService.start(ctx)
+                }
+            }
         )
 
         Divider()
@@ -208,10 +219,10 @@ fun EasyBangumiCard() {
         OkImage(
             modifier = Modifier.size(64.dp),
             image = R.mipmap.logo_n,
-            contentDescription = stringResource(com.heyanle.easy_i18n.R.string.app_name)
+            contentDescription = stringResource(com.heyanle.easy_i18n.R.string.the_app_name)
         )
         Spacer(modifier = Modifier.size(16.dp))
-        Text(text = stringResource(id = com.heyanle.easy_i18n.R.string.app_name))
+        Text(text = stringResource(id = com.heyanle.easy_i18n.R.string.the_app_name))
     }
 
 }

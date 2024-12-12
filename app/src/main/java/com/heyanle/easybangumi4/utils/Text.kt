@@ -9,6 +9,16 @@ fun String.shield(): Boolean {
     return false
 }
 
+fun String.isJson(): Boolean =
+    this.run {
+        val str = this.trim()
+        when {
+            str.startsWith("{") && str.endsWith("}") -> true
+            str.startsWith("[") && str.endsWith("]") -> true
+            else -> false
+        }
+    }
+
 /**
  * 格式化合成字符串，生成类似"1 - 2 - 3"这样的字符串，空白或者null不会加上多余分隔符
  */

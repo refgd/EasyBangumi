@@ -2,12 +2,18 @@ package com.heyanle.easybangumi4
 
 import android.app.ActivityManager
 import android.app.Application
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
 import android.os.Looper
 import android.os.Process
+import com.heyanle.easybangumi4.constant.NotificationId.channelIdDownload
+import com.heyanle.easybangumi4.constant.NotificationId.channelIdWeb
 import com.heyanle.easybangumi4.setting.SettingMMKVPreferences
 import com.heyanle.inject.core.Inject
+import splitties.systemservices.notificationManager
 
 /**
  * Created by HeYanLe on 2023/2/18 22:47.
@@ -62,6 +68,7 @@ class App : Application() {
         APP = this
         if (isMainProcess()) {
             Scheduler.runOnAppCreate(this)
+            createNotificationChannels()
         }
 
 
@@ -88,4 +95,39 @@ class App : Application() {
         return null
     }
 
+    /**
+     * 创建通知ID
+     */
+    private fun createNotificationChannels() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val downloadChannel = NotificationChannel(
+            channelIdDownload,
+            getString(com.heyanle.easy_i18n.R.string.download_channel_name),
+            NotificationManager.IMPORTANCE_DEFAULT
+        ).apply {
+            enableLights(false)
+            enableVibration(false)
+            setSound(null, null)
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+        }
+
+        val webChannel = NotificationChannel(
+            channelIdWeb,
+            getString(com.heyanle.easy_i18n.R.string.web_server),
+            NotificationManager.IMPORTANCE_DEFAULT
+        ).apply {
+            enableLights(false)
+            enableVibration(false)
+            setSound(null, null)
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+        }
+
+        //向notification manager 提交channel
+        notificationManager.createNotificationChannels(
+            listOf(
+                downloadChannel,
+                webChannel
+            )
+        )
+    }
 }

@@ -10,6 +10,7 @@ import com.heyanle.easybangumi4.ui.common.moeDialogAlert
 import com.heyanle.easybangumi4.ui.common.moeSnackBar
 import com.heyanle.easybangumi4.utils.stringRes
 import com.heyanle.inject.core.Inject
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -76,6 +77,8 @@ class SelectViewModel: ViewModel() {
             viewModelScope.launch {
                 val ex = extensionController.appendExtensionUri(uri, ExtensionInfo.TYPE_JS_FILE)
                 if (ex == null) {
+                    delay(1000)
+                    extensionController.scanFolder()
                     stringRes(com.heyanle.easy_i18n.R.string.extension_push_completely).moeSnackBar()
                 } else {
                     (ex.message?: stringRes(com.heyanle.easy_i18n.R.string.load_error)).moeDialogAlert(

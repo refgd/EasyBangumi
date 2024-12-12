@@ -125,22 +125,6 @@ fun <T> SourceContainerBase(
 }
 
 @Composable
-fun PageContainer(
-    sourceKey: String,
-    modifier: Modifier = Modifier,
-    errorContainerColor: Color = Color.Transparent,
-    content: @Composable (SourceBundle, Source, List<SourcePage>) -> Unit,
-) {
-    SourceContainerBase(
-        modifier = modifier,
-        errorContainerColor = errorContainerColor,
-        resolve = { bundle -> bundle.page(sourceKey) } // Resolve page
-    ) { bundle, page ->
-        content(bundle, page.source, page.getPages())
-    }
-}
-
-@Composable
 fun DetailedContainer(
     sourceKey: String,
     modifier: Modifier = Modifier,

@@ -44,7 +44,13 @@ class JsSource(
             importPackage(Packages.okhttp3);
            
             
-            var Log = JSLogUtils;
+            var Log = function(type, data) {
+                if(!data) {
+                    data = type;
+                    type = "DEBUG";
+                }
+                com.heyanle.easybangumi4.plugin.source.Debug.INSTANCE.log(Inject_Source.key, type+": "+JSON.stringify(data), true, true, 1);
+            }
          
             
             function makeCartoonCover(map) {

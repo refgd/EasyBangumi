@@ -70,6 +70,9 @@ class JsExtensionProvider(
     override fun innerAppendExtension(displayName: String, inputStream: InputStream) {
         val fileName = getNameWhenLoad(displayName, System.currentTimeMillis(), atomicLong.getAndIncrement())
         // "${System.currentTimeMillis()}-${atomicLong.getAndIncrement()}${getSuffix()}"
+        File(cacheFolder).mkdirs()
+        File(folderPath).mkdirs()
+
         val cacheFile = File(cacheFolder, fileName)
 
         val targetFileTemp = File(folderPath, "${fileName}.temp")

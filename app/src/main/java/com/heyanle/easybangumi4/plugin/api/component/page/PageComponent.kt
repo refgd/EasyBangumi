@@ -1,6 +1,10 @@
 package com.heyanle.easybangumi4.plugin.api.component.page
 
+import com.heyanle.easybangumi4.plugin.api.SourceResult
 import com.heyanle.easybangumi4.plugin.api.component.Component
+import com.heyanle.easybangumi4.plugin.api.entity.CartoonCover
+import com.heyanle.easybangumi4.plugin.js.entity.MainTab
+import com.heyanle.easybangumi4.plugin.js.entity.SubTab
 
 
 /**
@@ -13,6 +17,9 @@ interface PageComponent: Component {
         cartoonPage: SourcePage
     ) : List<SourcePage> by listOf(cartoonPage)
 
-    fun getPages(): List<SourcePage>
+    suspend fun getPages(): List<SourcePage>
 
+    suspend fun getMainTabs(): ArrayList<MainTab>?
+    suspend fun getSubTabs(label: String): ArrayList<SubTab>?
+    suspend fun getContent(mainTabLabel: String, subTabLabel: String, key: Int): SourceResult<Pair<Int?, List<CartoonCover>>>?
 }

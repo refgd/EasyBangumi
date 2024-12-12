@@ -43,6 +43,10 @@
 -keep class org.cybergarage.**{*;}
 -keep interface org.cybergarage.**{*;}
 
+# liveeventbus
+-dontwarn com.jeremyliao.liveeventbus.**
+-keep class com.jeremyliao.liveeventbus.** { *; }
+
 # 本体
 -keep class com.heyanle.**{*;}
 -keep interface com.heyanle.**{*;}

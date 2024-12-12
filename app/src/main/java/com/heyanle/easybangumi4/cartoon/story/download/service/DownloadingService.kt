@@ -11,6 +11,9 @@ import android.os.Build
 import android.os.IBinder
 import com.heyanle.easybangumi4.MainActivity
 import com.heyanle.easybangumi4.R
+import com.heyanle.easybangumi4.base.BaseService
+import com.heyanle.easybangumi4.constant.NotificationId
+import com.heyanle.easybangumi4.constant.NotificationId.channelIdDownload
 import com.heyanle.easybangumi4.utils.stringRes
 
 
@@ -18,15 +21,20 @@ import com.heyanle.easybangumi4.utils.stringRes
  * Created by heyanle on 2024/8/4.
  * https://github.com/heyanLE
  */
-class DownloadingService: Service() {
+class DownloadingService: BaseService() {
 
-    override fun onBind(intent: Intent?): IBinder? {
-        return null
+    companion object {
+        var isRun = false
+            private set
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        isRun = true
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         try {
-            val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
             val notificationIntent = Intent(this, MainActivity::class.java)
             val pendingIntent = PendingIntent.getActivity(
                 this, 0, notificationIntent,
@@ -35,16 +43,8 @@ class DownloadingService: Service() {
             var notification: Notification? = null
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
 
-                //只在Android O之上需要渠道
-                val notificationChannel = NotificationChannel(
-                    "easybangumi",
-                    "easybangumi_downloading",
-                    NotificationManager.IMPORTANCE_HIGH
-                )
-                //如果这里用IMPORTANCE_NOENE就需要在系统的设置里面开启渠道，通知才能正常弹出
-                manager.createNotificationChannel(notificationChannel)
-                notification = Notification.Builder(this, "easybangumi")
-                    .setContentTitle(stringRes(com.heyanle.easy_i18n.R.string.app_name))
+                notification = Notification.Builder(this, channelIdDownload)
+                    .setContentTitle(stringRes(com.heyanle.easy_i18n.R.string.the_app_name))
                     .setContentText(stringRes(com.heyanle.easy_i18n.R.string.downloading))
                     .setSmallIcon(R.mipmap.logo_n)
                     .setContentIntent(pendingIntent)
@@ -52,18 +52,16 @@ class DownloadingService: Service() {
                     .build()
             }
 
-            startForeground(1, notification)
+            startForeground(NotificationId.DownloadService, notification)
         } catch (e: Throwable) {
             e.printStackTrace()
         }
 
-        return START_STICKY
+        return super.onStartCommand(intent, flags, startId)
     }
 
     override fun onDestroy() {
+        isRun = false
         super.onDestroy()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            stopForeground(Service.STOP_FOREGROUND_REMOVE);
-        }
     }
 }

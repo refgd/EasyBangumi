@@ -4,19 +4,10 @@ import com.heyanle.buildsrc.Android
 import com.heyanle.buildsrc.RoomSchemaArgProvider
 import java.util.Properties
 
-val DEFAULT_RELEASE = false
-val release = isRelease()
-
-fun isRelease() = (System.getenv("RELEASE") ?: "") == "true"
-
 plugins {
     alias(build.plugins.android.application)
     alias(build.plugins.kotlin.android)
     alias(build.plugins.ksp)
-    if ((System.getenv("RELEASE") ?: "true") == "") {
-        id("com.google.gms.google-services")
-        id("com.google.firebase.crashlytics")
-    }
 }
 
 
@@ -27,9 +18,6 @@ runCatching {
 }.onFailure {
     // it.printStackTrace()
 }
-
-val packageName = if (release) "com.refgd.easybangumi4" else "com.refgd.easybangumi4.debug"
-val labelNameRes = if (release) "@string/app_name" else "纯纯看看"
 
 android {
     namespace =  "com.heyanle.easybangumi4"
@@ -45,7 +33,7 @@ android {
 
         buildConfigField("String", "ENC_KEY", "\"${encKey}\"")
 
-        applicationId = packageName
+        applicationId = "com.refgd.easybangumi4"
         minSdk = Android.minSdk
         targetSdk = Android.targetSdk
         versionCode = Android.versionCode
@@ -61,9 +49,9 @@ android {
             publishingProps.getProperty("bugly_appid", System.getenv("BUGLY_APPID")?:"")
         manifestPlaceholders["bugly_app_version"] = Android.versionName
         manifestPlaceholders["bugly_app_channel"] = "github"
-        manifestPlaceholders["package_name"] = packageName
-        manifestPlaceholders["label_res"] = labelNameRes
-        manifestPlaceholders["is_release"] = release
+        manifestPlaceholders["package_name"] = "com.refgd.easybangumi4"
+        manifestPlaceholders["label_res"] = "@string/the_app_name"
+        manifestPlaceholders["is_release"] = true
 
         // bugly 调试模式
         manifestPlaceholders["bugly_is_debug"] = false
@@ -187,7 +175,18 @@ dependencies {
 
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.jar"))))
     implementation(androidx.bundles.core)
+    implementation(libs.androidx.lifecycle.service)
     androidTestImplementation(androidx.bundles.test.core)
+
+    implementation(libs.splitties.appctx)
+    implementation(libs.splitties.systemservices)
+
+    //webServer
+    implementation(libs.nanohttpd.nanohttpd)
+    implementation(libs.nanohttpd.websocket)
+
+    //liveEventBus
+    implementation(libs.liveeventbus)
 
     implementation(androidx.bundles.room.impl)
     implementation(androidx.room.paging)

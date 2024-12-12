@@ -1,6 +1,7 @@
 package com.heyanle.easybangumi4.utils
 
 import androidx.annotation.WorkerThread
+import java.io.ByteArrayOutputStream
 import java.io.File
 import javax.crypto.Cipher
 import javax.crypto.CipherInputStream
@@ -60,6 +61,7 @@ fun File.aesDecryptTo(file: File, key: String, chunkSize: Int) {
         if (!file.canWrite()) {
             return
         }
+        
         val secretKey = SecretKeySpec(key.toByteArray(), "AES")
         val cipher = Cipher.getInstance("AES/ECB/PKCS7Padding")
         cipher.init(Cipher.DECRYPT_MODE, secretKey)
@@ -78,4 +80,31 @@ fun File.aesDecryptTo(file: File, key: String, chunkSize: Int) {
         e.printStackTrace()
     }
 
+}
+
+@WorkerThread
+fun String.aesEncryptTo(key: String, chunkSize: Int): ByteArray? {
+    return try {
+        val secretKey = SecretKeySpec(key.toByteArray(), "AES")
+        val cipher = Cipher.getInstance("AES/ECB/PKCS7Padding")
+        cipher.init(Cipher.ENCRYPT_MODE, secretKey)
+
+        val inputBytes = this.toByteArray()
+        val outputStream = ByteArrayOutputStream()
+
+        CipherOutputStream(outputStream, cipher).use { cos ->
+            var offset = 0
+
+            while (offset < inputBytes.size) {
+                val bytesToWrite = minOf(chunkSize, inputBytes.size - offset)
+                cos.write(inputBytes, offset, bytesToWrite)
+                offset += bytesToWrite
+            }
+        }
+
+        outputStream.toByteArray()
+    } catch (e: Exception) {
+        e.printStackTrace()
+        null
+    }
 }

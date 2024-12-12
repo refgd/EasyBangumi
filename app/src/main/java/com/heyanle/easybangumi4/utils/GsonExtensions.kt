@@ -68,3 +68,13 @@ fun <T: Any> String.jsonTo(type: Type): T? {
         }
     }
 }
+
+fun String?.isJson(): Boolean =
+    this?.run {
+        val str = this.trim()
+        when {
+            str.startsWith("{") && str.endsWith("}") -> true
+            str.startsWith("[") && str.endsWith("]") -> true
+            else -> false
+        }
+    } ?: false

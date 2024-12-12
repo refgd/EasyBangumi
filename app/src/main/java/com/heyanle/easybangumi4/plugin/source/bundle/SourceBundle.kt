@@ -9,6 +9,7 @@ import com.heyanle.easybangumi4.plugin.api.component.preference.PreferenceCompon
 import com.heyanle.easybangumi4.plugin.api.component.search.SearchComponent
 import com.heyanle.easybangumi4.plugin.source.ConfigSource
 import com.heyanle.easybangumi4.plugin.source.SourceInfo
+import com.heyanle.easybangumi4.utils.logi
 
 
 /**
@@ -83,6 +84,7 @@ class SourceBundle(
     }
 
     suspend fun page(key: String): PageComponent? {
+        key.logi("page")
         return sourceMap[key]?.componentBundle?.getComponentProxy<PageComponent>()
     }
 

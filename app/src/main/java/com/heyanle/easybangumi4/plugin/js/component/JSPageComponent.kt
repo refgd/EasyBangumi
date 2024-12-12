@@ -14,6 +14,7 @@ import com.heyanle.easybangumi4.plugin.js.runtime.JSScope
 import com.heyanle.easybangumi4.plugin.js.runtime.JSScopeException
 import com.heyanle.easybangumi4.plugin.js.utils.JSFunction
 import com.heyanle.easybangumi4.plugin.js.utils.jsUnwrap
+import com.heyanle.easybangumi4.plugin.source.Debug
 import com.heyanle.easybangumi4.utils.logi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
@@ -59,42 +60,13 @@ class JSPageComponent(
     @Volatile
     private var mainTabList = arrayListOf<MainTab>()
 
+    private var SubTabList: MutableMap<String, ArrayList<SubTab>> = HashMap()
 
-    override suspend fun init() {
-        // 历史遗留问题导致 getPages 不是 suspend 方法，业务也没有做加载态直接同步加载
-        // 这里 getMainTab 的操作只能前置到 init
-        // 这里 5s 超时尽量保证 getMainTab 不做延时操作
-        try {
-            jsScope.requestRunWithScope (
-                5000,
-            ) { context, scriptable ->
-                val result = arrayListOf<MainTab>()
-                (getMainTabs.call(
-                    context, scriptable, scriptable, arrayOf()
-                )?.apply {
-                    this.logi("JSPageComponent")
-                }.jsUnwrap() as? ArrayList<*>)?.let {
-                    if (it is NonLabelMainTab) {
-                        result.add(MainTab("", it.type))
-                    } else {
-                        it.forEach {
-                            if (it is MainTab) {
-                                result.add(it)
-                            }
-                        }
-                    }
-                }
-                mainTabList.clear()
-                mainTabList.addAll(result)
-            }
-        } catch (e: TimeoutCancellationException) {
-            e.printStackTrace()
-            throw JSScopeException("${FUNCTION_NAME_GET_MAIN_TABS} 方法需要同步返回，异步 tab 需要设定 NonLabelMainTab 后在 subTab 处理")
+    override suspend fun getPages(): List<SourcePage> {
+        if(mainTabList.isEmpty()){
+            getMainTabs()
         }
 
-    }
-
-    override fun getPages(): List<SourcePage> {
         if (mainTabList.size == 1) {
             val f = mainTabList.first()
             if (f.label.isEmpty()) {
@@ -106,6 +78,58 @@ class JSPageComponent(
         return mainTabList.map { mainTab2SourcePage(it) }.apply {
             this.logi("JSPageComponent")
         }
+    }
+
+    override suspend fun getMainTabs(): ArrayList<MainTab>? {
+        if(mainTabList.isEmpty()){
+            return jsScope.runWithScope { context, scriptable ->
+                (getMainTabs.call(
+                    context, scriptable, scriptable, arrayOf()
+                )?.jsUnwrap() as? ArrayList<*>)?.filterIsInstance<MainTab>()
+                    ?.map {
+                        mainTabList.add(it)
+                    }
+
+                mainTabList
+            }
+        }
+        return mainTabList
+    }
+
+    override suspend fun getSubTabs(label: String): ArrayList<SubTab>? {
+        if(SubTabList.containsKey(label)) return SubTabList[label]
+
+        val mainTab = mainTabList.find { it.label == label }
+        if (mainTab == null) return null
+
+        return jsScope.runWithScope { context, scriptable ->
+            val result = arrayListOf<SubTab>()
+            (getSubTabs.call(
+                context, scriptable, scriptable, arrayOf(mainTab)
+            )?.jsUnwrap() as? ArrayList<*>)?.filterIsInstance<SubTab>()
+                ?.map {
+                    result.add(it)
+                }
+
+            SubTabList[label] = result
+            result
+        }
+    }
+
+    override suspend fun getContent(
+        mainTabLabel: String,
+        subTabLabel: String,
+        key: Int
+    ): SourceResult<Pair<Int?, List<CartoonCover>>>? {
+        val mainTab = mainTabList.find { it.label == mainTabLabel }
+        if (mainTab == null) return null
+
+        var subTab: SubTab? = null
+        if (subTabLabel.isNotEmpty() && SubTabList.containsKey(mainTabLabel)){
+            subTab = SubTabList[mainTabLabel]?.find { it.label == subTabLabel }
+        }
+
+        return load(mainTab, subTab, key)
     }
 
     private fun mainTab2SourcePage(mainTab: MainTab) : SourcePage{

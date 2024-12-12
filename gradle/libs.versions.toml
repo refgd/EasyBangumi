@@ -53,6 +53,12 @@ bugly = "4.1.9.3"
 xcrash = "3.0.0"
 
 uni_file = "1.0.0"
+
+lifecycle-service = "2.8.7"
+splitties = "3.0.0"
+nanoHttpd = "2.3.1"
+liveeventbus = "1.8.14"
+
 [libraries]
 jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
 okhttp3 = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp3" }
@@ -123,6 +129,18 @@ bugly = {module = "com.tencent.bugly:crashreport", version.ref = "bugly" }
 xcrash = {module = "com.iqiyi.xcrash:xcrash-android-lib", version.ref = "xcrash"}
 
 uni_file = {module = "com.github.easybangumiorg:UniFile", version.ref = "uni_file"}
+
+androidx-lifecycle-service = { group = "androidx.lifecycle", name = "lifecycle-service", version.ref = "lifecycle-service" }
+
+splitties-appctx = { module = "com.louiscad.splitties:splitties-appctx", version.ref = "splitties" }
+splitties-activities = { module = "com.louiscad.splitties:splitties-activities", version.ref = "splitties" }
+splitties-systemservices = { module = "com.louiscad.splitties:splitties-systemservices", version.ref = "splitties" }
+splitties-views = { module = "com.louiscad.splitties:splitties-views", version.ref = "splitties" }
+
+nanohttpd-nanohttpd = { module = "org.nanohttpd:nanohttpd", version.ref = "nanoHttpd" }
+nanohttpd-websocket = { module = "org.nanohttpd:nanohttpd-websocket", version.ref = "nanoHttpd" }
+liveeventbus = { module = "com.github.michaellee123:LiveEventBus", version.ref = "liveeventbus" }
+
 [bundles]
 okhttp3 = ["okhttp3", "okhttp3_logging_interceptor"]
 cling = ["cling_core", "cling_support"]
