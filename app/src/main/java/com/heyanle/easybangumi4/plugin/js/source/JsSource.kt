@@ -8,7 +8,7 @@ import androidx.compose.material.icons.filled.Javascript
 import com.heyanle.easybangumi4.plugin.api.IconSource
 import com.heyanle.easybangumi4.plugin.api.Source
 import com.heyanle.easybangumi4.plugin.js.extension.JSExtensionLoader
-import com.heyanle.easybangumi4.plugin.js.runtime.JSScope
+import com.heyanle.easybangumi4.plugin.js.runtime.JSRuntimeProvider
 import java.io.File
 import kotlin.reflect.KClass
 
@@ -19,7 +19,7 @@ import kotlin.reflect.KClass
 class JsSource(
     val map: Map<String, String>,
     val js: Any,
-    val jsScope: JSScope,
+    val jsRuntime: JSRuntimeProvider,
 ): Source, AsyncIconSource, IconSource {
 
     companion object {

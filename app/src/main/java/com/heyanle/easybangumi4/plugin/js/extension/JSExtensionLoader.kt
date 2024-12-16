@@ -8,7 +8,6 @@ import com.heyanle.easybangumi4.plugin.extension.loader.AbsExtensionLoader
 import com.heyanle.easybangumi4.plugin.extension.loader.ExtensionLoader
 import com.heyanle.easybangumi4.plugin.extension.provider.JsExtensionProvider
 import com.heyanle.easybangumi4.plugin.js.runtime.JSRuntimeProvider
-import com.heyanle.easybangumi4.plugin.js.runtime.JSScope
 import com.heyanle.easybangumi4.plugin.js.source.JsSource
 import java.io.File
 
@@ -91,8 +90,6 @@ class JSExtensionLoader(
             }
         }
 
-        val jsScope = JSScope(jsRuntime.getRuntime())
-
         val label = map[JS_SOURCE_TAG_LABEL] ?: ""
         val key = map[JS_SOURCE_TAG_KEY] ?: ""
         val versionName = map[JS_SOURCE_TAG_VERSION_NAME] ?: ""
@@ -146,7 +143,7 @@ class JSExtensionLoader(
             libVersion = libVersion,
             readme = "",
             icon = Icons.Filled.Javascript,
-            sources = listOf(JsSource(map, file, jsScope)) ,
+            sources = listOf(JsSource(map, file, jsRuntime)) ,
             resources = null,
             loadType = ExtensionInfo.TYPE_JS_FILE,
             hasPref = hasPref,

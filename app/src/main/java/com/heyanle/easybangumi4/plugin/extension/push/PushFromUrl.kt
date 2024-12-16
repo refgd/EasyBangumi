@@ -128,7 +128,7 @@ class PushFromUrl(
             targetFile
         }.let {
             // 添加完再扫描
-            extensionController.withNoWatching(true) {
+            extensionController.withNoWatching {
                 yield()
                 it.map {
                     // 加载

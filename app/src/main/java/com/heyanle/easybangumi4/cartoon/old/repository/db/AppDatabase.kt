@@ -48,11 +48,7 @@ abstract class AppDatabase : RoomDatabase() {
             return Room.databaseBuilder(
                 context,
                 AppDatabase::class.java, "easy_cartoon"
-            ).apply {
-                Migrate.AppDB.getDBMigration().forEach {
-                    addMigrations(it)
-                }
-            }.build()
+            ).build()
         }
     }
 

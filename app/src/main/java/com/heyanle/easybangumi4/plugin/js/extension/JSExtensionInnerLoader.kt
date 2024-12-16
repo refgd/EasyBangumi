@@ -14,9 +14,7 @@ import com.heyanle.easybangumi4.plugin.js.extension.JSExtensionLoader.Companion.
 import com.heyanle.easybangumi4.plugin.js.extension.JSExtensionLoader.Companion.JS_SOURCE_TAG_VERSION_CODE
 import com.heyanle.easybangumi4.plugin.js.extension.JSExtensionLoader.Companion.JS_SOURCE_TAG_VERSION_NAME
 import com.heyanle.easybangumi4.plugin.js.runtime.JSRuntimeProvider
-import com.heyanle.easybangumi4.plugin.js.runtime.JSScope
 import com.heyanle.easybangumi4.plugin.js.source.JsSource
-import com.heyanle.easybangumi4.utils.logi
 
 /**
  * Created by heyanle on 2024/7/30.
@@ -62,6 +60,10 @@ class JSExtensionInnerLoader(
                 val key = line.substring(firstAtIndex + 1, spacerAfterAtIndex)
                 val value = line.substring(spacerAfterAtIndex + 1)
                 map[key] = value
+
+                if(key == JS_SOURCE_TAG_KEY) {
+                    map[key] = map[key] + ".__debug__"
+                }
             }else{
                 if (line.contains("function PreferenceComponent_getPreference(")) {
                     map[JSExtensionLoader.JS_SOURCE_HAS_PREF] = "1"
@@ -72,10 +74,8 @@ class JSExtensionInnerLoader(
             }
         }
 
-        val jsScope = JSScope(jsRuntime.getRuntime())
-
         val label = map[JS_SOURCE_TAG_LABEL] ?: ""
-        val key = map[JS_SOURCE_TAG_KEY] ?: ""
+        val key = map[JS_SOURCE_TAG_KEY]  ?: ""
         val versionName = map[JS_SOURCE_TAG_VERSION_NAME] ?: ""
         val versionCode = map[JS_SOURCE_TAG_VERSION_CODE]?.toLongOrNull() ?: -1L
         val libVersion = map[JS_SOURCE_TAG_LIB_VERSION]?.toIntOrNull() ?: -1
@@ -127,7 +127,7 @@ class JSExtensionInnerLoader(
             libVersion = libVersion,
             readme = "",
             icon = Icons.Filled.Javascript,
-            sources = listOf(JsSource(map, js, jsScope)) ,
+            sources = listOf(JsSource(map, js, jsRuntime)) ,
             resources = null,
             loadType = ExtensionInfo.TYPE_JS_FILE,
             hasPref = hasPref,

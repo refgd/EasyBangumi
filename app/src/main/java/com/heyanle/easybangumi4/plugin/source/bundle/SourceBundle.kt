@@ -84,7 +84,6 @@ class SourceBundle(
     }
 
     suspend fun page(key: String): PageComponent? {
-        key.logi("page")
         return sourceMap[key]?.componentBundle?.getComponentProxy<PageComponent>()
     }
 

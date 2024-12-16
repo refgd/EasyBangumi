@@ -75,6 +75,8 @@ interface ComponentBundle {
     suspend fun getComponentProxy(clazz: KClass<*>): Any?
 
     fun release()
+
+    fun destory()
 }
 
 suspend inline fun <reified T: Component> ComponentBundle.getComponentProxy(): T? {

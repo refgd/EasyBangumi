@@ -28,6 +28,7 @@ import java.util.Locale
 object Debug {
     var callback: Callback? = null
     private var debugSource: String? = null
+    private var debugBundle: JSComponentBundle? = null
     private val tasks: CompositeCoroutine = CompositeCoroutine()
 
     @SuppressLint("ConstantLocale")
@@ -67,6 +68,9 @@ object Debug {
         tasks.clear()
 
         if (destroy) {
+            debugBundle?.destory()
+
+            debugBundle = null
             debugSource = null
             callback = null
         }
@@ -78,8 +82,9 @@ object Debug {
         debugSource = ext.key
 
         log(ext.key, "⇒开始加载插件:${ext.key}")
-        val bundle = JSComponentBundle(ext.sources[0] as JsSource)
-        getMainTabs(scope, bundle)
+        debugBundle = JSComponentBundle(ext.sources[0] as JsSource)
+
+        getMainTabs(scope, debugBundle!!)
     }
 
     private fun getMainTabs(scope: CoroutineScope, bundle: JSComponentBundle) {

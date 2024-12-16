@@ -23,13 +23,16 @@ import com.heyanle.easybangumi4.plugin.js.component.JSPageComponent
 import com.heyanle.easybangumi4.plugin.js.component.JSPlayComponent
 import com.heyanle.easybangumi4.plugin.js.component.JSPreferenceComponent
 import com.heyanle.easybangumi4.plugin.js.component.JSSearchComponent
+import com.heyanle.easybangumi4.plugin.js.runtime.JSScope
 import com.heyanle.easybangumi4.plugin.source.SourceException
 import com.heyanle.easybangumi4.plugin.source.bundle.ComponentBundle
 import com.heyanle.easybangumi4.plugin.source.bundle.ComponentProxy
+import com.heyanle.easybangumi4.utils.getFilePath
 import com.heyanle.easybangumi4.utils.logi
 import com.heyanle.inject.api.get
 import com.heyanle.inject.core.Inject
 import kotlinx.coroutines.runBlocking
+import java.io.File
 import java.lang.reflect.Proxy
 import kotlin.reflect.KClass
 
@@ -74,9 +77,10 @@ class JSComponentBundle(
         }
 
         val jsFile = jsSource.getJsFile()
+        val jsScope = JSScope(jsSource.jsRuntime.getRuntime())
 
 
-        jsSource.jsScope.runWithScope { context, scriptable ->
+        jsScope.runWithScope { context, scriptable ->
             // 2. import
             context.evaluateString(
                 scriptable,
@@ -116,11 +120,11 @@ class JSComponentBundle(
         }
 
         // 5. 检查 & 加载 Component
-        val jsSearchComponent = JSSearchComponent.of(jsSource.jsScope)
-        val jsPageComponent = JSPageComponent.of(jsSource.jsScope)
-        val jsPlayComponent = JSPlayComponent.of(jsSource.jsScope)
-        val jsDetailedComponent = JSDetailedComponent.of(jsSource.jsScope)
-        val jsPreferenceComponent = JSPreferenceComponent.of(jsSource.jsScope)
+        val jsSearchComponent = JSSearchComponent.of(jsScope)
+        val jsPageComponent = JSPageComponent.of(jsScope)
+        val jsPlayComponent = JSPlayComponent.of(jsScope)
+        val jsDetailedComponent = JSDetailedComponent.of(jsScope)
+        val jsPreferenceComponent = JSPreferenceComponent.of(jsScope)
 
         if(jsSearchComponent != null){
             jsSearchComponent.innerSource = jsSource
@@ -202,6 +206,37 @@ class JSComponentBundle(
 
     override fun release() {
         bundle.clear()
+    }
+
+    override fun destory() {
+        this.release()
+
+        val jsFile = File(APP.getFilePath("extension-js"), "${jsSource.key}.ebg.jsc")
+        runCatching {
+            if (jsFile.exists()) {
+                jsFile.delete()
+            }
+        }.onFailure {
+            it.printStackTrace()
+        }
+
+        val journalFile = File(APP.getFilePath("source_preference"), "${jsSource.key}.journal")
+        runCatching {
+            if (journalFile.exists()) {
+                journalFile.delete()
+            }
+        }.onFailure {
+            it.printStackTrace()
+        }
+
+        val bkbFile = File(APP.getFilePath("source_preference"), "${jsSource.key}.journal.bkb")
+        runCatching {
+            if (bkbFile.exists()) {
+                bkbFile.delete()
+            }
+        }.onFailure {
+            it.printStackTrace()
+        }
     }
 
     private fun putAnyway(clazz: KClass<*>, instance: Any){

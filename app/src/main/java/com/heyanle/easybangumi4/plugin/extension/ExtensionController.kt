@@ -9,6 +9,7 @@ import com.hippo.unifile.UniFile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -105,7 +106,7 @@ class ExtensionController(
         jsExtensionProvider.scanFolder()
     }
 
-    suspend fun <R> withNoWatching(isScan: Boolean = true, block:suspend  ()-> R): R? {
+    suspend fun <R> withNoWatching(block:suspend  ()-> R): R? {
         jsExtensionProvider.stopWatching()
         val r = try {
             block()
@@ -113,11 +114,10 @@ class ExtensionController(
             e.printStackTrace()
             null
         }
+
+        delay(500)
         jsExtensionProvider.startWatching()
 
-        if (isScan) {
-            jsExtensionProvider.scanFolder()
-        }
         return r
     }
 

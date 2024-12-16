@@ -77,7 +77,7 @@ class SelectViewModel: ViewModel() {
             viewModelScope.launch {
                 val ex = extensionController.appendExtensionUri(uri, ExtensionInfo.TYPE_JS_FILE)
                 if (ex == null) {
-                    delay(1000)
+                    delay(500)
                     extensionController.scanFolder()
                     stringRes(com.heyanle.easy_i18n.R.string.extension_push_completely).moeSnackBar()
                 } else {

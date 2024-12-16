@@ -281,20 +281,19 @@ fun SourceItem(
         mutableStateOf(false)
     }
 
-    var sourcePath by remember { mutableStateOf("") }
     var sourceName by remember { mutableStateOf("") }
 
     EasyDeleteDialog(
-        show = sourcePath != "",
+        show = sourceName != "",
         message = {
             Text(text = stringResource(id = R.string.delete_confirmation, sourceName))
         },
         onDelete = {
-            File(sourcePath).delete()
+            (sourceInfo as SourceInfo.Loaded).componentBundle.destory()
 
-            sourcePath = ""
+            sourceName = ""
         }) {
-        sourcePath = ""
+        sourceName = ""
     }
 
     ListItem(
@@ -362,7 +361,6 @@ fun SourceItem(
                                 onClick = {
                                     showItMenu = false
                                     sourceName = sourceInfo.source.label
-                                    sourcePath = sourceInfo.source.sourcePath
                                 },
                                 leadingIcon = {
                                     Icon(Icons.Filled.Delete, contentDescription = stringResource(id = R.string.delete))
@@ -374,7 +372,6 @@ fun SourceItem(
                 }
                 is SourceInfo.Error -> {
                     Text(text = sourceInfo.msg)
-
                 }
             }
 

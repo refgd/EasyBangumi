@@ -215,4 +215,8 @@ class SimpleComponentBundle(
         bundle.clear()
     }
 
+    override fun destory() {
+        this.release()
+    }
+
 }

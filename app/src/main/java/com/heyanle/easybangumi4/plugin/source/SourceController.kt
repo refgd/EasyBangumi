@@ -165,7 +165,9 @@ class SourceController(
         TimeLogUtils.i("loadSource ${source.key} start")
         return try {
             val bundle = if (source is JsSource) JSComponentBundle(source) else SimpleComponentBundle(source)
-
+            if (source !is JsSource) {
+                bundle.init()
+            }
             SourceInfo.Loaded(source, bundle)
         } catch (e: SourceException) {
             SourceInfo.Error(source,  e.msg, e)
