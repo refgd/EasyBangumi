@@ -96,6 +96,7 @@ class DetailedViewModel(
             cartoonInfoCase.awaitCartoonInfoWithPlayLines(
                 cartoonSummary.id,
                 cartoonSummary.source,
+                cartoonSummary.name,
             )
                 .onOK {
                     yield()

@@ -2,6 +2,7 @@ package com.heyanle.easybangumi4.plugin.source.bundle
 
 import com.heyanle.easybangumi4.plugin.api.IconSource
 import com.heyanle.easybangumi4.plugin.api.Source
+import com.heyanle.easybangumi4.plugin.api.component.danmaku.DanmakuComponent
 import com.heyanle.easybangumi4.plugin.api.component.detailed.DetailedComponent
 import com.heyanle.easybangumi4.plugin.api.component.page.PageComponent
 import com.heyanle.easybangumi4.plugin.api.component.play.PlayComponent
@@ -105,6 +106,10 @@ class SourceBundle(
 
     suspend fun detailed(key: String): DetailedComponent? {
         return sourceMap[key]?.componentBundle?.getComponentProxy<DetailedComponent>()
+    }
+
+    suspend fun danmaku(key: String): DanmakuComponent? {
+        return sourceMap[key]?.componentBundle?.getComponentProxy<DanmakuComponent>()
     }
 
     fun empty(): Boolean {

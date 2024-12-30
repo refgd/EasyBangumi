@@ -11,6 +11,7 @@ import java.io.Serializable
 data class CartoonSummary(
     var id: String,              // 标识，由源自己支持，用于区分番剧
     var source: String,
+    var name: String,
 ) : Serializable {
 
     fun isChild(

@@ -58,8 +58,10 @@ lifecycle-service = "2.8.7"
 splitties = "3.0.0"
 nanoHttpd = "2.3.1"
 liveeventbus = "1.8.14"
+danmaku-render-engine = "0.1.0"
 
 [libraries]
+danmaku-render-engine = { module = "com.github.bytedance:danmaku-render-engine", version.ref = "danmaku-render-engine" }
 jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
 okhttp3 = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp3" }
 okhttp3_logging_interceptor = { module = "com.squareup.okhttp3:logging-interceptor", version.ref = "okhttp3" }

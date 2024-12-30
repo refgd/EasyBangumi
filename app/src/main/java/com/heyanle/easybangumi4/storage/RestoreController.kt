@@ -216,6 +216,12 @@ class RestoreController(
                             useExternalVideoPlayer.get()
                         )
                     )
+                    useDanmaku.set(
+                        spO.optBoolean(
+                            useDanmaku.key(),
+                            useDanmaku.get()
+                        )
+                    )
                     playerBottomNavigationBarPadding.set(
                         spO.optBoolean(
                             playerBottomNavigationBarPadding.key(),

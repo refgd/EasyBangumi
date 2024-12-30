@@ -173,6 +173,7 @@ fun History(
                 nav.navigationDetailed(
                     it.id,
                     it.source,
+                    it.name,
                     enterData
                 )
             },

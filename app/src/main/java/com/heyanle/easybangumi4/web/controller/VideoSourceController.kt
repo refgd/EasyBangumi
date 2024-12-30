@@ -1,5 +1,6 @@
 package com.heyanle.easybangumi4.web.controller
 
+import com.bytedance.danmaku.render.engine.render.draw.text.TextData
 import com.heyanle.easybangumi4.base.DataResult
 import com.heyanle.easybangumi4.cartoon.entity.CartoonStoryItem
 import com.heyanle.easybangumi4.cartoon.story.CartoonStoryController
@@ -158,10 +159,11 @@ object VideoSourceController {
 
         val sourceKey = postData["source_key"]?.firstOrNull()
         val videoId = postData["video_id"]?.firstOrNull()
+        val videoName = postData["video_name"]?.firstOrNull()
 
-        if (sourceKey != null && videoId != null) {
+        if (sourceKey != null && videoId != null && videoName != null) {
             sourceController.sourceBundle.value?.detailed(sourceKey)?.let { currentPage ->
-                currentPage.getAll(CartoonSummary(videoId, sourceKey)).complete { result ->
+                currentPage.getAll(CartoonSummary(videoId, sourceKey, videoName)).complete { result ->
                     returnData.setData(
                         DetailResultJson(
                             cartoon = result.data.first.run {
@@ -194,18 +196,55 @@ object VideoSourceController {
 
         val sourceKey = postData["source_key"]?.firstOrNull()
         val videoId = postData["video_id"]?.firstOrNull()
+        val videoName = postData["video_name"]?.firstOrNull()
         val episode = postData["episode"]?.firstOrNull()?.jsonTo<Episode>()
 
-        if (sourceKey != null && videoId != null && episode != null) {
+        if (sourceKey != null && videoId != null && videoName != null && episode != null) {
             sourceController.sourceBundle.value?.play(sourceKey)?.let { currentPage ->
                 currentPage.getPlayInfo(
-                    CartoonSummary(videoId, sourceKey),
+                    CartoonSummary(videoId, sourceKey, videoName),
                     PlayLine("", "", arrayListOf()),
                     episode
                 ).complete { result ->
                     returnData.setData(result.data)
                 }
             }
+        }
+
+        return returnData
+    }
+
+    suspend fun getDanmaku(postData: MutableMap<String, MutableList<String>>): ReturnData {
+        val returnData = ReturnData()
+
+        val sourceKey = postData["source_key"]?.firstOrNull()
+        val videoId = postData["video_id"]?.firstOrNull()
+        val videoName = postData["video_name"]?.firstOrNull()
+        val episode = postData["episode"]?.firstOrNull()?.jsonTo<Episode>()
+
+        if (sourceKey != null && videoId != null && videoName != null && episode != null) {
+            returnData.setData(
+                sourceController.sourceBundle.value?.danmaku(sourceKey)?.let { currentPage ->
+                    var list: List<DanmakuJson> = emptyList()
+
+                    currentPage.getDanmakuInfo(
+                        CartoonSummary(videoId, sourceKey, videoName),
+                        PlayLine("", "", arrayListOf()),
+                        episode
+                    ).complete { result ->
+                        list = result.data.mapNotNull { danmaku ->
+                            (danmaku as? TextData)?.text?.let { text ->
+                                DanmakuJson(
+                                    text = text,
+                                    time = (danmaku.showAtTime / 1000.0)
+                                )
+                            }
+                        }
+                    }
+
+                    list
+                }.orEmpty()
+            )
         }
 
         return returnData
@@ -297,5 +336,10 @@ class CartoonJson(
     var updateStrategy: Int,
     var isUpdate: Boolean,
     var status: Int,
+)
+
+class DanmakuJson(
+    var text: String,
+    var time: Double,
 )
 

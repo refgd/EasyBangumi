@@ -2,7 +2,6 @@ package com.heyanle.easybangumi4.ui.cartoon_play
 
 import android.app.Activity
 import androidx.activity.compose.BackHandler
-import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -54,6 +53,8 @@ import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Subtitles
+import androidx.compose.material.icons.filled.SubtitlesOff
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -78,8 +79,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.FileProvider
 import androidx.media3.common.util.UnstableApi
+import com.bytedance.danmaku.render.engine.DanmakuView
 import com.heyanle.easy_i18n.R
 import com.heyanle.easybangumi4.APP
 import com.heyanle.easybangumi4.LocalNavController
@@ -179,6 +182,18 @@ fun VideoFloat(
         } else {
             controlVM.setSpeed(if (defaultSpeed > 0) defaultSpeed else 1f)
         }
+    }
+
+    //弹幕窗口
+    if(cartoonPlayingViewModel.danmakuEnabled){
+        AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = { context ->
+                DanmakuView(context).apply {
+                    cartoonPlayingViewModel.initDanmakuController(this.controller)
+                }
+            }
+        )
     }
 
     BackHandler(
@@ -289,7 +304,6 @@ fun VideoFloat(
             }
         }
     }
-
 
     // 倍速窗口
     AnimatedVisibility(
@@ -487,7 +501,7 @@ fun VideoFloat(
     }
 }
 
-@OptIn(UnstableApi::class)
+@UnstableApi
 @Composable
 fun VideoControl(
     controlVM: ControlViewModel,
@@ -630,6 +644,7 @@ fun VideoControl(
                         nav.navigationDlna(
                             detailState.cartoonInfo?.id ?: "",
                             detailState.cartoonInfo?.source ?: "",
+                            detailState.cartoonInfo?.name ?: "",
                             enterData
                         )
                     }
@@ -656,6 +671,7 @@ fun VideoControl(
 
             EasyVideoBottomControl(
                 vm = controlVM,
+                playingVM = cartoonPlayingVM,
                 modifier = Modifier.align(Alignment.BottomCenter),
                 paddingValues = if (controlVM.isFullScreen) PaddingValues(
                     16.dp,
@@ -681,8 +697,6 @@ fun VideoControl(
             ProgressBox(vm = controlVM)
         }
     }
-
-
 }
 
 @Composable
@@ -868,9 +882,11 @@ fun NormalVideoTopBar(
     }
 }
 
+@UnstableApi
 @Composable
 fun EasyVideoBottomControl(
     vm: ControlViewModel,
+    playingVM: CartoonPlayingViewModel,
     modifier: Modifier = Modifier,
     paddingValues: PaddingValues = PaddingValues(0.dp),
     onShowEpisodeWin: () -> Unit,
@@ -928,6 +944,34 @@ fun EasyVideoBottomControl(
             )
 
             TimeText(time = vm.during, Color.White)
+
+            if (playingVM.hasDanmaku) {
+                IconButton(
+                    onClick = {
+                        playingVM.onToggleDanmaku()
+                    }
+                ) {
+                    if (playingVM.danmakuEnabled) {
+                        Icon(
+                            Icons.Filled.Subtitles,
+                            tint = Color.White,
+                            contentDescription = "禁用弹幕"
+                        )
+                    } else if (playingVM.danmakuList.isEmpty()) {
+                        Icon(
+                            Icons.Filled.SubtitlesOff,
+                            tint = Color.DarkGray,
+                            contentDescription = "无弹幕"
+                        )
+                    } else {
+                        Icon(
+                            Icons.Filled.SubtitlesOff,
+                            tint = Color.White,
+                            contentDescription = "启用弹幕"
+                        )
+                    }
+                }
+            }
 
             if (vm.isFullScreen) {
                 Text(

@@ -185,6 +185,7 @@ class MigrateItemViewModel(
                 CartoonSummary(
                     cartoonCover.id,
                     cartoonCover.source,
+                    cartoonCover.title
                 )
             )
                 .complete { complete ->

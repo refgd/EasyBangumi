@@ -2,6 +2,7 @@ package com.heyanle.easybangumi4.utils
 
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.request.parameter
 import io.ktor.client.request.prepareGet
 import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.core.isEmpty
@@ -26,7 +27,9 @@ suspend fun String.downloadTo(path: String) {
     if(targetFileTemp.exists()){
         targetFileTemp.delete()
     }
-    KtorUtil.client.prepareGet (this).execute { httpResponse ->
+    KtorUtil.client.prepareGet (this) {
+        parameter("_t", System.currentTimeMillis())
+    }.execute { httpResponse ->
         val channel: ByteReadChannel = httpResponse.body()
         while (!channel.isClosedForRead) {
             val packet = channel.readRemaining(DEFAULT_BUFFER_SIZE.toLong())

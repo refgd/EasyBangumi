@@ -35,8 +35,10 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.util.UnstableApi
+import com.bytedance.danmaku.render.engine.DanmakuView
 import com.heyanle.easy_i18n.R
 import com.heyanle.easybangumi4.LocalNavController
 import com.heyanle.easybangumi4.cartoon.entity.CartoonInfo
@@ -79,10 +81,11 @@ import loli.ball.easyplayer2.EasyPlayerStateSync
 fun CartoonPlay(
     id: String,
     source: String,
+    name: String,
     enterData: CartoonPlayViewModel.EnterData? = null
 ) {
     val summary = remember(key1 = id, key2 = source) {
-        CartoonSummary(id, source)
+        CartoonSummary(id, source, name)
     }
     val nav = LocalNavController.current
 

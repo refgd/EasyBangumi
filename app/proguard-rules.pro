@@ -51,6 +51,10 @@
 -keep class com.heyanle.**{*;}
 -keep interface com.heyanle.**{*;}
 
+# danmaku
+-keep class com.bytedance.danmaku.**{*;}
+-keep interface com.bytedance.danmaku.**{*;}
+
 # 协程
 
 -keep class kotlin.** { *; }

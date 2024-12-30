@@ -51,7 +51,6 @@ class JsSource(
                 }
                 com.heyanle.easybangumi4.plugin.source.Debug.INSTANCE.log(Inject_Source.key, type+": "+JSON.stringify(data), true, true, 1);
             }
-         
             
             function makeCartoonCover(map) {
                 var id = map.id;
@@ -123,6 +122,45 @@ class JsSource(
                 return new CartoonImpl(
                     id, source, url, title, genre, coverUrl, intro, description, updateStrategy, isUpdate, status
                 );
+            }
+            
+            function makeTextDanmaku(map) {
+                var textData = new Packages.com.bytedance.danmaku.render.engine.render.draw.text.TextData()
+                
+                if (map.text != undefined) {
+                    textData.text = map.text;
+                }
+                if (map.showAtTime != undefined) {
+                    textData.showAtTime = map.showAtTime;
+                }
+                if (map.textSize != undefined) {
+                    textData.textSize = map.textSize;
+                }
+                if (map.textColor != undefined) {
+                    textData.textColor = map.textColor;
+                }
+                if (map.typeface != undefined) {
+                    textData.typeface = map.typeface;
+                }
+                if (map.textStrokeWidth != undefined) {
+                    textData.textStrokeWidth = map.textStrokeWidth;
+                }
+                if (map.textStrokeColor != undefined) {
+                    textData.textStrokeColor = map.textStrokeColor;
+                }
+                if (map.includeFontPadding != undefined) {
+                    textData.includeFontPadding = map.includeFontPadding;
+                }
+                if (map.hasUnderline != undefined) {
+                    textData.hasUnderline = map.hasUnderline;
+                }
+                if (map.layerType != undefined) {
+                    textData.layerType = map.layerType;
+                }else{
+                    textData.layerType = 1001;
+                }
+                
+                return textData;
             }
         """
     }

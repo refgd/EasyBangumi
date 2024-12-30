@@ -220,7 +220,7 @@ fun Star() {
                 nestedScrollConnection = scrollBehavior.nestedScrollConnection,
                 starCartoon = list, selectionSet = state.selection, onStarClick = {
                     if (state.selection.isEmpty()) {
-                        nav.navigationDetailed(it.id, it.url, it.source)
+                        nav.navigationDetailed(it.id, it.name, it.source)
                     } else {
                         starVM.onSelectionChange(it)
                     }
@@ -259,7 +259,7 @@ fun Star() {
                     //nestedScrollConnection = scrollBehavior.nestedScrollConnection,
                     starCartoon = list, selectionSet = state.selection, onStarClick = {
                         if (state.selection.isEmpty()) {
-                            nav.navigationDetailed(it.id, it.url, it.source)
+                            nav.navigationDetailed(it.id, it.name, it.source)
                         } else {
                             starVM.onSelectionChange(it)
                         }

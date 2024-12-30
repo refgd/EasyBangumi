@@ -90,6 +90,11 @@ fun ColumnScope.PlayerSetting(
         )
 
         BooleanPreferenceItem(
+            title = { Text(stringResource(id = com.heyanle.easy_i18n.R.string.use_danmaku)) },
+            preference = settingPreferences.useDanmaku
+        )
+
+        BooleanPreferenceItem(
             title = { Text(stringResource(id = com.heyanle.easy_i18n.R.string.player_bottom_nav_padding)) },
             preference = settingPreferences.playerBottomNavigationBarPadding
         )

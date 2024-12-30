@@ -86,10 +86,11 @@ import kotlinx.coroutines.launch
 fun Dlna(
     id: String,
     source: String,
+    name: String,
     enterData: CartoonPlayViewModel.EnterData? = null
 ) {
-    val summary = remember(key1 = id, key2 = source) {
-        CartoonSummary(id, source)
+    val summary = remember(key1 = id, key2 = source, key3 = name) {
+        CartoonSummary(id, source, name)
     }
     val nav = LocalNavController.current
 

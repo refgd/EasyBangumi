@@ -179,6 +179,7 @@ class BackupController(
             spO.put(padMode.key(), padMode.get().name)
             spO.put(playerOrientationMode.key(), playerOrientationMode.get().name)
             spO.put(useExternalVideoPlayer.key(), useExternalVideoPlayer.get())
+            spO.put(useDanmaku.key(), useDanmaku.get())
             spO.put(playerBottomNavigationBarPadding.key(), playerBottomNavigationBarPadding.get())
             spO.put(cacheSize.key(), cacheSize.get())
             spO.put(customSpeed.key(), customSpeed.get())

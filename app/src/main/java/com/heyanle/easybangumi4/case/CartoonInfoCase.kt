@@ -17,9 +17,10 @@ class CartoonInfoCase(
     suspend fun awaitCartoonInfoWithPlayLines(
         id: String,
         source: String,
+        name: String,
         time: Long = System.currentTimeMillis(),
     ): DataResult<CartoonInfo> {
-        return cartoonRepository.awaitCartoonInfoWIthPlayLines(id, source, time)
+        return cartoonRepository.awaitCartoonInfoWIthPlayLines(id, source, name, time)
     }
 
     suspend fun flowCartoonStar(): Flow<List<CartoonInfo>> {

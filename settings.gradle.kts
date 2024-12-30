@@ -18,6 +18,7 @@ dependencyResolutionManagement {
             isAllowInsecureProtocol = true
         }
         maven { url = uri("https://jitpack.io") }
+        maven { url = uri("https://artifact.bytedance.com/repository/releases/") }
     }
     versionCatalogs {
         create("androidx") {

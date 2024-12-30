@@ -110,61 +110,48 @@ fun NavHostController.navigationSourceHome(key: String) {
     navigate("${SOURCE_HOME}?key=${key}")
 }
 
-fun NavHostController.navigationDetailed(id: String, url: String, source: String) {
-    val el = URLEncoder.encode(url, "utf-8")
+fun NavHostController.navigationDetailed(id: String, name: String, source: String) {
     val ed = URLEncoder.encode(id, "utf-8")
+    val en = URLEncoder.encode(name, "utf-8")
     val es = URLEncoder.encode(source, "utf-8")
     // easyTODO("详情页")
-    navigate("${DETAILED}?url=${el}&source=${es}&id=${ed}")
+    navigate("${DETAILED}?source=${es}&id=${ed}&name=${en}")
 }
 
 fun NavHostController.navigationDetailed(cartoonCover: CartoonCover) {
-    val url = URLEncoder.encode(cartoonCover.url, "utf-8")
+    val name = URLEncoder.encode(cartoonCover.title, "utf-8")
     val id = URLEncoder.encode(cartoonCover.id, "utf-8")
     val es = URLEncoder.encode(cartoonCover.source, "utf-8")
     // easyTODO("详情页")
-    navigate("${DETAILED}?url=${url}&source=${es}&id=${id}")
+    navigate("${DETAILED}?source=${es}&id=${id}&name=${name}")
 }
 
 fun NavHostController.navigationSourceManager(defIndex: Int = -1) {
     navigate("${SOURCE_MANAGER}?defIndex=${defIndex}")
 }
 
-
-fun NavHostController.navigationDetailed(
-    cartoonCover: CartoonCover,
-    lineIndex: Int,
-    episode: Int,
-    adviceProgress: Long,
-) {
-    // easyTODO("详情页")
-    val url = URLEncoder.encode(cartoonCover.url, "utf-8")
-    val id = URLEncoder.encode(cartoonCover.id, "utf-8")
-    val es = URLEncoder.encode(cartoonCover.source, "utf-8")
-    // easyTODO("详情页")
-    navigate("${DETAILED}?url=${url}&source=${es}&id=${id}&lineIndex=${lineIndex}&episode=${episode}&adviceProgress=${adviceProgress}")
-}
-
 fun NavHostController.navigationDlna(
-    i: String, s: String,
+    i: String, s: String, n: String,
     e: CartoonPlayViewModel.EnterData,
 ) {
     val id = URLEncoder.encode(i, "utf-8")
     val ed = URLEncoder.encode(s, "utf-8")
+    val name = URLEncoder.encode(n, "utf-8")
     val enterData = URLEncoder.encode(e.toJson(), "utf-8")
     // easyTODO("详情页")
-    navigate("${DLNA}?source=${ed}&id=${id}&enter_date=${enterData}")
+    navigate("${DLNA}?source=${ed}&id=${id}&name=${name}&enter_date=${enterData}")
 }
 
 fun NavHostController.navigationDetailed(
-    i: String, s: String,
+    i: String, s: String, n: String,
     e: CartoonPlayViewModel.EnterData,
 ) {
     val id = URLEncoder.encode(i, "utf-8")
     val ed = URLEncoder.encode(s, "utf-8")
+    val en = URLEncoder.encode(n, "utf-8")
     val enterData = URLEncoder.encode(e.toJson(), "utf-8")
     // easyTODO("详情页")
-    navigate("${DETAILED}?source=${ed}&id=${id}&enter_date=${enterData}")
+    navigate("${DETAILED}?source=${ed}&id=${id}&name=${en}&enter_date=${enterData}")
 }
 
 fun NavHostController.navigationLocalPlay(
@@ -249,16 +236,18 @@ fun Nav() {
             }
 
             composable(
-                route = "${DETAILED}?source={source}&id={id}&enter_data={enter_data}",
+                route = "${DETAILED}?source={source}&id={id}&name={name}&enter_data={enter_data}",
                 arguments = listOf(
                     navArgument("source") { defaultValue = "" },
                     navArgument("id") { defaultValue = "" },
+                    navArgument("name") { defaultValue = "" },
                     navArgument("enter_data") { defaultValue = "{}" },
                     )
             ) {
 
                 val id = it.arguments?.getString("id") ?: ""
                 val source = it.arguments?.getString("source") ?: ""
+                val name = it.arguments?.getString("name") ?: ""
 
                 var enterDataString = it.arguments?.getString("enter_data") ?: ""
                 enterDataString = URLDecoder.decode(enterDataString, "utf-8")
@@ -266,6 +255,7 @@ fun Nav() {
                 ScreenShowEvent(
                     "id" to id,
                     "source" to source,
+                    "name" to name,
                     "enter_data" to enterDataString
                 )
                 NormalSystemBarColor(
@@ -280,27 +270,31 @@ fun Nav() {
                 CartoonPlay(
                     id = URLDecoder.decode(id, "utf-8"),
                     source = URLDecoder.decode(source, "utf-8"),
+                    name = URLDecoder.decode(name, "utf-8"),
                     enterData
                 )
             }
 
             composable(
-                route = "${DLNA}?source={source}&id={id}&enter_data={enter_data}",
+                route = "${DLNA}?source={source}&id={id}&name={name}&enter_data={enter_data}",
                 arguments = listOf(
                     navArgument("source") { defaultValue = "" },
                     navArgument("id") { defaultValue = "" },
+                    navArgument("name") { defaultValue = "" },
                     navArgument("enter_data") { defaultValue = "{}" },
                 )
             ) {
 
                 val id = it.arguments?.getString("id") ?: ""
                 val source = it.arguments?.getString("source") ?: ""
+                val name = it.arguments?.getString("name") ?: ""
 
                 var enterDataString = it.arguments?.getString("enter_data") ?: ""
                 enterDataString = URLDecoder.decode(enterDataString, "utf-8")
                 ScreenShowEvent(
                     "id" to id,
                     "source" to source,
+                    "name" to name,
                     "enter_data" to enterDataString
                 )
                 NormalSystemBarColor()
@@ -311,6 +305,7 @@ fun Nav() {
                 Dlna(
                     id = URLDecoder.decode(id, "utf-8"),
                     source = URLDecoder.decode(source, "utf-8"),
+                    name = URLDecoder.decode(name, "utf-8"),
                     enterData
                 )
             }

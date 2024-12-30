@@ -24,6 +24,7 @@ class CartoonRepository(
     suspend fun awaitCartoonInfoWIthPlayLines(
         id: String,
         source: String,
+        name: String,
         time: Long = System.currentTimeMillis(),
     ): DataResult<CartoonInfo> {
         return withContext(Dispatchers.IO) {
@@ -32,7 +33,7 @@ class CartoonRepository(
             if (local != null && local.isDetailed && local.isPlayLineLoad && time <= oldUpdateTime) {
                 return@withContext DataResult.ok(local)
             }
-            val netResult = cartoonNetworkDataSource.awaitCartoonWithPlayLines(id, source)
+            val netResult = cartoonNetworkDataSource.awaitCartoonWithPlayLines(id, source, name)
 
             // 异步缓存
             launch(Dispatchers.IO) {

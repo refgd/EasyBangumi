@@ -223,6 +223,8 @@ dependencies {
     implementation(libs.gson)
     implementation(libs.moshi)
 
+    implementation(libs.danmaku.render.engine)
+
     //debugImplementation(libs.leakcanary)
 
     implementation(libs.glide)

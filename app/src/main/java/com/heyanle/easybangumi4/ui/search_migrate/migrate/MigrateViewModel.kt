@@ -55,7 +55,7 @@ class MigrateViewModel(
     init {
         viewModelScope.launch {
             val infoList = summaries.map {
-                cartoonInfoCase.awaitCartoonInfoWithPlayLines(it.id, it.source)
+                cartoonInfoCase.awaitCartoonInfoWithPlayLines(it.id, it.source, it.name)
             }.filterIsInstance<DataResult.Ok<CartoonInfo>>()
                 .map {
                     it.data

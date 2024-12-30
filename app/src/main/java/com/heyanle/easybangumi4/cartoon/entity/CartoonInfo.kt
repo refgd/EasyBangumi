@@ -253,7 +253,7 @@ data class CartoonInfo(
 
 
     fun toSummary(): CartoonSummary {
-        return CartoonSummary(id, source)
+        return CartoonSummary(id, source, name)
     }
 
     fun toCartoon(): Cartoon {

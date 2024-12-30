@@ -182,7 +182,7 @@ object Debug {
         log(debugSource, "︾获取详情[${cartoonCover.title}]")
         val task = Coroutine.async(scope, Dispatchers.IO) {
             bundle.getComponentProxy<DetailedComponent>()
-                ?.getAll(CartoonSummary(cartoonCover.id, debugSource!!))
+                ?.getAll(CartoonSummary(cartoonCover.id, debugSource!!, cartoonCover.title))
         }
             .onSuccess { results ->
                 results?.complete { result ->
@@ -215,7 +215,7 @@ object Debug {
         log(debugSource, "︾获取视频地址[${episode.label}]")
         val task = Coroutine.async(scope, Dispatchers.IO) {
             bundle.getComponentProxy<PlayComponent>()
-                ?.getPlayInfo(CartoonSummary(cartoonCover.id, debugSource!!), playLine, episode)
+                ?.getPlayInfo(CartoonSummary(cartoonCover.id, debugSource!!, cartoonCover.title), playLine, episode)
         }
             .onSuccess { results ->
                 results?.complete { result ->

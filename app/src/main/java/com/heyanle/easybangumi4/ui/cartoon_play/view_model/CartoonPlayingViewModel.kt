@@ -5,7 +5,9 @@ import android.graphics.Bitmap
 import android.graphics.SurfaceTexture
 import android.view.TextureView
 import androidx.annotation.OptIn
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
@@ -13,6 +15,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import com.bytedance.danmaku.render.engine.control.DanmakuController
+import com.bytedance.danmaku.render.engine.data.DanmakuData
 import com.heyanle.easybangumi4.APP
 import com.heyanle.easybangumi4.cartoon.repository.db.dao.CartoonInfoDao
 import com.heyanle.easybangumi4.cartoon.story.local.source.LocalSource
@@ -95,6 +99,8 @@ class CartoonPlayingViewModel(
     // 任务管理 =================================================
     // 加载任务
     private var lastJob: Job? = null
+
+    private var danmakuController: DanmakuController? = null
 
     // 获取缩略图任务
     private var thumbnailJob: Job? = null
@@ -224,19 +230,21 @@ class CartoonPlayingViewModel(
     // 刷新 & 播放 ===================================
 
     fun tryRefresh() {
+
+        stopDanmaku()
         lastJob?.cancel()
         lastJob = scope.launch {
             cartoonPlayingState?.let {
                 innerPlay(it, 0)
             }
         }
-
     }
 
     fun changePlay(
         cartoonPlayingState: CartoonPlayViewModel.CartoonPlayState?,
         adviceProcess: Long,
     ) {
+        stopDanmaku()
         lastJob?.cancel()
         lastJob = scope.launch {
             this@CartoonPlayingViewModel.cartoonPlayingState = cartoonPlayingState
@@ -360,7 +368,17 @@ class CartoonPlayingViewModel(
                 }
             }
 
+        danmakuEnabled = settingPreferences.useDanmaku.get()
+        danmakuInited = false
+        danmakuLoading = false
 
+        val danmaku = sourceStateCase.awaitBundle().danmaku(cartoonPlayingState.cartoonSummary.source)
+        if(danmaku == null){
+            hasDanmaku = false
+        }else{
+            hasDanmaku = true
+            loadDanmaku()
+        }
     }
 
 
@@ -441,6 +459,8 @@ class CartoonPlayingViewModel(
         if (_playingState.value.isPlaying && !exoPlayer.playWhenReady && exoPlayer.isMedia()) {
             trySaveHistory()
         }
+
+        stopDanmaku()
         lastJob?.cancel()
         exoPlayer.pause()
     }
@@ -449,6 +469,17 @@ class CartoonPlayingViewModel(
 
     override fun onPlaybackStateChanged(playbackState: Int) {
         super.onPlaybackStateChanged(playbackState)
+
+        when (playbackState) {
+            Player.STATE_BUFFERING -> {
+                pauseDanmaku()
+            }
+
+            Player.STATE_ENDED -> {
+                pauseDanmaku()
+            }
+        }
+
         if (_playingState.value.isPlaying && !exoPlayer.playWhenReady && exoPlayer.isMedia()) {
             trySaveHistory()
         }
@@ -466,6 +497,8 @@ class CartoonPlayingViewModel(
 
     override fun onCleared() {
         super.onCleared()
+
+        stopDanmaku()
         lastJob?.cancel()
         scope.cancel()
         exoPlayer.release()
@@ -529,5 +562,110 @@ class CartoonPlayingViewModel(
 
     private fun ExoPlayer.isMedia(): Boolean {
         return playbackState == Player.STATE_BUFFERING || playbackState == Player.STATE_READY
+    }
+
+    override fun onIsPlayingChanged(isPlaying: Boolean) {
+        super.onIsPlayingChanged(isPlaying)
+        if(isPlaying){
+            startDanmaku()
+        }else{
+            pauseDanmaku()
+        }
+    }
+
+    override fun onPositionDiscontinuity(
+        oldPosition: Player.PositionInfo,
+        newPosition: Player.PositionInfo,
+        reason: Int
+    ) {
+        super.onPositionDiscontinuity(oldPosition, newPosition, reason)
+
+        danmakuController?.clear()
+        startDanmaku()
+    }
+
+
+    //弹幕
+
+    var danmakuEnabled by mutableStateOf(false)
+    var hasDanmaku by mutableStateOf(false)
+    private var danmakuInited by mutableStateOf(false)
+    private var danmakuLoading by mutableStateOf(false)
+
+    var danmakuList by mutableStateOf<List<DanmakuData>>(emptyList())
+
+    fun onToggleDanmaku() {
+        viewModelScope.launch {
+            if (danmakuEnabled) {
+                danmakuEnabled = false
+                danmakuInited = false
+                danmakuController?.stop()
+            } else if(danmakuList.isNotEmpty()){
+                danmakuEnabled = true
+                loadDanmaku()
+            }
+        }
+    }
+
+    fun initDanmakuController(controller: DanmakuController) {
+        danmakuInited = false
+        danmakuController?.stop()
+
+        danmakuController = controller
+        startDanmaku()
+    }
+
+    private fun startDanmaku(){
+        if(!hasDanmaku || !danmakuEnabled || danmakuController == null || danmakuList.isEmpty() || !exoPlayer.isPlaying) return
+
+        if(!danmakuInited){
+            danmakuInited = true;
+            danmakuController?.setData(danmakuList)
+        }
+        danmakuController?.start(exoPlayer.currentPosition)
+    }
+
+    private fun pauseDanmaku(){
+        if(hasDanmaku && danmakuEnabled && danmakuController != null){
+            danmakuController?.pause()
+        }
+    }
+
+    private fun stopDanmaku(){
+        danmakuList = emptyList()
+
+        danmakuInited = false
+        danmakuLoading = false
+        danmakuEnabled = false
+
+        danmakuController?.stop()
+    }
+
+    private suspend fun loadDanmaku(){
+        if(hasDanmaku && danmakuEnabled && cartoonPlayingState != null){
+            if(danmakuInited){
+                startDanmaku()
+            }else if(!danmakuLoading){
+                danmakuLoading = true
+
+                val danmaku = sourceStateCase.awaitBundle().danmaku(cartoonPlayingState!!.cartoonSummary.source)
+                danmaku?.getDanmakuInfo(
+                    cartoonPlayingState!!.cartoonSummary,
+                    cartoonPlayingState!!.playLine.playLine,
+                    cartoonPlayingState!!.episode
+                )?.complete {
+                    yield()
+
+                    danmakuList = it.data
+                    if(danmakuList.isEmpty()){
+                        danmakuEnabled = false
+                    }else{
+                        startDanmaku()
+                    }
+
+                    danmakuLoading = false
+                }
+            }
+        }
     }
 }

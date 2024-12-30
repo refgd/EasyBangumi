@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.annotation.WorkerThread
 import com.heyanle.easybangumi4.APP
 import com.heyanle.easybangumi4.plugin.api.component.Component
+import com.heyanle.easybangumi4.plugin.api.component.danmaku.DanmakuComponent
 import com.heyanle.easybangumi4.plugin.api.component.detailed.DetailedComponent
 import com.heyanle.easybangumi4.plugin.api.component.page.PageComponent
 import com.heyanle.easybangumi4.plugin.api.component.play.PlayComponent
@@ -21,6 +22,7 @@ import com.heyanle.easybangumi4.plugin.api.utils.api.WebViewHelperV2
 import com.heyanle.easybangumi4.plugin.js.component.JSDetailedComponent
 import com.heyanle.easybangumi4.plugin.js.component.JSPageComponent
 import com.heyanle.easybangumi4.plugin.js.component.JSPlayComponent
+import com.heyanle.easybangumi4.plugin.js.component.JSDanmakuComponent
 import com.heyanle.easybangumi4.plugin.js.component.JSPreferenceComponent
 import com.heyanle.easybangumi4.plugin.js.component.JSSearchComponent
 import com.heyanle.easybangumi4.plugin.js.runtime.JSScope
@@ -123,6 +125,7 @@ class JSComponentBundle(
         val jsSearchComponent = JSSearchComponent.of(jsScope)
         val jsPageComponent = JSPageComponent.of(jsScope)
         val jsPlayComponent = JSPlayComponent.of(jsScope)
+        val jsDanmakuComponent = JSDanmakuComponent.of(jsScope)
         val jsDetailedComponent = JSDetailedComponent.of(jsScope)
         val jsPreferenceComponent = JSPreferenceComponent.of(jsScope)
 
@@ -140,6 +143,11 @@ class JSComponentBundle(
             jsPlayComponent.innerSource = jsSource
             jsPlayComponent.init()
             put(PlayComponent::class, jsPlayComponent)
+        }
+        if(jsDanmakuComponent != null){
+            jsDanmakuComponent.innerSource = jsSource
+            jsDanmakuComponent.init()
+            put(DanmakuComponent::class, jsDanmakuComponent)
         }
         if(jsDetailedComponent != null){
             jsDetailedComponent.innerSource = jsSource

@@ -64,6 +64,7 @@ class HttpServer(port: Int) : NanoHTTPD(port) {
             "/api/getPageContent" -> VideoSourceController.getContent(session.parameters)
             "/api/getDetailed" -> VideoSourceController.getDetailed(session.parameters)
             "/api/getPlayInfo" -> VideoSourceController.getPlayInfo(session.parameters)
+            "/api/getDanmaku" -> VideoSourceController.getDanmaku(session.parameters)
             "/api/search" -> VideoSourceController.search(session.parameters)
             "/api/downCode" -> SourceController.downCode(session.parameters)
             else -> null
