@@ -47,6 +47,7 @@
     
     <string name="use_external_player">默认使用外置播放器</string>
     <string name="use_danmaku">默认开启弹幕</string>
+    <string name="danmaku_text_size">弹幕字体大小</string>
     <string name="player_bottom_nav_padding">平板模式播放器底部抬高</string>
     <string name="player_orientation_mode">跟随传感器切换全屏</string>
 

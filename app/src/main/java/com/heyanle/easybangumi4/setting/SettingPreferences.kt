@@ -51,6 +51,7 @@ class SettingPreferences(
     // 使用外置播放器
     var useExternalVideoPlayer = preferenceStore.getBoolean("use_external_video_player", false)
     var useDanmaku = preferenceStore.getBoolean("use_danmaku", true)
+    val danmakuTextSize = preferenceStore.getLong("danmaku_text_size", 56)
 
     var playerBottomNavigationBarPadding =
         preferenceStore.getBoolean("player_bottom_nav_padding", true)

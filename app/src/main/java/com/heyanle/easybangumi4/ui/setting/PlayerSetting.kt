@@ -94,6 +94,11 @@ fun ColumnScope.PlayerSetting(
             preference = settingPreferences.useDanmaku
         )
 
+        LongEditPreferenceItem(
+            title = { Text(text = stringResource(id = com.heyanle.easy_i18n.R.string.danmaku_text_size)) },
+            preference = settingPreferences.danmakuTextSize
+        )
+
         BooleanPreferenceItem(
             title = { Text(stringResource(id = com.heyanle.easy_i18n.R.string.player_bottom_nav_padding)) },
             preference = settingPreferences.playerBottomNavigationBarPadding

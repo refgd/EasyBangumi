@@ -17,6 +17,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import com.bytedance.danmaku.render.engine.control.DanmakuController
 import com.bytedance.danmaku.render.engine.data.DanmakuData
+import com.bytedance.danmaku.render.engine.utils.CMD_SET_TOUCHABLE
 import com.heyanle.easybangumi4.APP
 import com.heyanle.easybangumi4.cartoon.repository.db.dao.CartoonInfoDao
 import com.heyanle.easybangumi4.cartoon.story.local.source.LocalSource
@@ -326,7 +327,6 @@ class CartoonPlayingViewModel(
         cartoonPlayingState: CartoonPlayViewModel.CartoonPlayState,
         adviceProcess: Long,
     ) {
-
         exoPlayer.pause()
         _playingState.update {
             it.copy(
@@ -580,7 +580,6 @@ class CartoonPlayingViewModel(
     ) {
         super.onPositionDiscontinuity(oldPosition, newPosition, reason)
 
-        danmakuController?.clear()
         startDanmaku()
     }
 
@@ -591,6 +590,8 @@ class CartoonPlayingViewModel(
     var hasDanmaku by mutableStateOf(false)
     private var danmakuInited by mutableStateOf(false)
     private var danmakuLoading by mutableStateOf(false)
+    private var danmakuLastPosition = 0L
+    private val danmakuTextSize = settingPreferences.danmakuTextSize
 
     var danmakuList by mutableStateOf<List<DanmakuData>>(emptyList())
 
@@ -611,6 +612,10 @@ class CartoonPlayingViewModel(
         danmakuInited = false
         danmakuController?.stop()
 
+        controller.executeCommand(CMD_SET_TOUCHABLE, null, false)
+        controller.config.text.size = danmakuTextSize.get() * 1f
+        controller.config.scroll.lineHeight = controller.config.text.size + 6f
+
         danmakuController = controller
         startDanmaku()
     }
@@ -622,11 +627,17 @@ class CartoonPlayingViewModel(
             danmakuInited = true;
             danmakuController?.setData(danmakuList)
         }
+        if(exoPlayer.currentPosition < danmakuLastPosition){
+            danmakuController?.clear()
+        }
+
         danmakuController?.start(exoPlayer.currentPosition)
+        danmakuLastPosition = exoPlayer.currentPosition
     }
 
     private fun pauseDanmaku(){
         if(hasDanmaku && danmakuEnabled && danmakuController != null){
+            danmakuLastPosition = exoPlayer.currentPosition
             danmakuController?.pause()
         }
     }
