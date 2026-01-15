@@ -1,5 +1,6 @@
 package com.heyanle.easybangumi4.ui.cartoon_play
 
+import android.annotation.SuppressLint
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
@@ -35,10 +36,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.util.UnstableApi
-import com.bytedance.danmaku.render.engine.DanmakuView
 import com.heyanle.easy_i18n.R
 import com.heyanle.easybangumi4.LocalNavController
 import com.heyanle.easybangumi4.cartoon.entity.CartoonInfo
@@ -71,6 +70,9 @@ import loli.ball.easyplayer2.ControlViewModel
 import loli.ball.easyplayer2.ControlViewModelFactory
 import loli.ball.easyplayer2.EasyPlayerScaffoldBase
 import loli.ball.easyplayer2.EasyPlayerStateSync
+import androidx.compose.ui.platform.LocalContext
+import com.heyanle.easybangumi4.MainActivity
+import com.heyanle.easybangumi4.pip.PipController
 
 /**
  * Created by heyanle on 2023/12/17.
@@ -97,7 +99,8 @@ fun CartoonPlay(
     val controlVM = ControlViewModelFactory.viewModel(
         playingVM.exoPlayer,
         isPad,
-        render = playingVM.easyTextRenderer
+        render = playingVM.easyTextRenderer,
+        pipState = PipController.isInPip
     )
 
     val detailedState = detailedVM.stateFlow.collectAsState()
@@ -112,6 +115,18 @@ fun CartoonPlay(
     }
     var saveDialogState by remember {
         mutableStateOf<Triple<CartoonInfo, PlayLineWrapper, List<Episode>>?>(null)
+    }
+    
+    DisposableEffect(Unit) {
+        PipController.bindPlayer(playingVM.exoPlayer)
+        onDispose {
+            PipController.unbindPlayer(playingVM.exoPlayer)
+        }
+    }
+
+    LaunchedEffect(playingState.value.isPaused) {
+        PipController.setEnabled(!playingState.value.isPaused)
+        PipController.updatePipActions()
     }
 
     // 将同步范围拓展到整个界面，包括 recorded dialog
@@ -312,11 +327,6 @@ fun CartoonPlay(
                     modifier = Modifier.focusRequester(focusRequest),
                     value = text.value,
                     onValueChange = { s ->
-                        if (s.none {
-                                (it < '0' || it > '9')
-                            }) {
-
-                        }
                         text.value = s
                     })
             },
@@ -386,6 +396,7 @@ val speedConfig = linkedMapOf(
 )
 
 
+@SuppressLint("NewApi")
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
 fun CartoonPlay(
@@ -405,11 +416,13 @@ fun CartoonPlay(
     onSave: (Triple<CartoonInfo, PlayLineWrapper, List<Episode>>) -> Unit
 ) {
     val nav = LocalNavController.current
+    val isInPip by PipController.isInPip.collectAsState()
 
-
-    DisposableEffect(key1 = Unit) {
+    DisposableEffect(Unit) {
         onDispose {
-            playingVM.onExit()
+            if (!isInPip) {
+                playingVM.onExit()
+            }
         }
     }
 
@@ -476,20 +489,20 @@ fun CartoonPlay(
             }
         },
         control = {
-            VideoControl(
-                controlVM = controlVM,
-                cartoonPlayingVM = playingVM,
-                cartoonPlayVM = playVM,
-                playingState = playingState,
-                detailState = detailState,
-                sourcePlayState = playState,
-                showSpeedWin = showSpeedWin,
-                showEpisodeWin = showEpisodeWin,
-                showVideoScaleTypeWin = showScaleTypeWin
-            )
+            if (!isInPip) {
+                VideoControl(
+                    controlVM = controlVM,
+                    cartoonPlayingVM = playingVM,
+                    cartoonPlayVM = playVM,
+                    playingState = playingState,
+                    detailState = detailState,
+                    sourcePlayState = playState,
+                    showSpeedWin = showSpeedWin,
+                    showEpisodeWin = showEpisodeWin,
+                    showVideoScaleTypeWin = showScaleTypeWin
+                )
+            }
         }) {
-
-
 
         val compose: @Composable ()->Unit = {
             Surface(

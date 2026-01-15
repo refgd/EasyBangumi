@@ -85,6 +85,7 @@ class CartoonPlayingViewModel(
         val isLoading: Boolean = true,
         val isPlaying: Boolean = false,
         val isError: Boolean = false,
+        val isPaused: Boolean = true,
         val errorMsg: String = "",
         val errorThrowable: Throwable? = null
     )
@@ -566,6 +567,9 @@ class CartoonPlayingViewModel(
 
     override fun onIsPlayingChanged(isPlaying: Boolean) {
         super.onIsPlayingChanged(isPlaying)
+
+        _playingState.update { it.copy(isPaused = !isPlaying) }
+
         if(isPlaying){
             startDanmaku()
         }else{

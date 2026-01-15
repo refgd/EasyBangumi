@@ -24,9 +24,6 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
-import com.google.firebase.analytics.FirebaseAnalytics
-import com.google.firebase.analytics.ktx.analytics
-import com.google.firebase.ktx.Firebase
 import com.heyanle.easybangumi4.plugin.source.SourcesHost
 import com.heyanle.easybangumi4.splash.SplashActivity
 import com.heyanle.easybangumi4.theme.EasyTheme
@@ -35,7 +32,21 @@ import com.heyanle.easybangumi4.ui.common.MoeDialogHost
 import com.heyanle.easybangumi4.ui.common.MoeSnackBar
 import com.heyanle.easybangumi4.utils.MediaUtils
 import com.heyanle.okkv2.core.okkv
-
+import android.app.PictureInPictureParams
+import android.content.pm.PackageManager
+import android.os.Build
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import android.app.PendingIntent
+import android.app.RemoteAction
+import android.content.Intent
+import android.content.res.Configuration
+import android.graphics.drawable.Icon
+import android.util.Log
+import androidx.annotation.RequiresApi
+import androidx.lifecycle.Lifecycle
+import com.heyanle.easybangumi4.pip.PipActionReceiver
+import com.heyanle.easybangumi4.pip.PipController
 
 /**
  * Created by HeYanLe on 2023/10/29 21:20.
@@ -46,24 +57,40 @@ val LocalWindowSizeController = staticCompositionLocalOf<WindowSizeClass> {
     error("AppNavController Not Provide")
 }
 
-val LocalFirebaseAnalytics = staticCompositionLocalOf<FirebaseAnalytics?> {
-    null
-}
-
 class MainActivity : ComponentActivity() {
-
-    private var firebaseAnalytics: FirebaseAnalytics? = null
 
     var first by okkv("first_visible", def = true)
     private val launcherBus = LauncherBus(this)
 
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
+        PipController.onPictureInPictureModeChanged(isInPictureInPictureMode)
+
+        val state = lifecycle.currentState
+        if (state == Lifecycle.State.CREATED) {
+            PipController.handlePipClosed()
+        } else if (state == Lifecycle.State.STARTED) {
+            PipController.handlePipMaximized()
+        }
+
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        PipController.onUserLeaveHint()
+    }
+
+    override fun onDestroy() {
+        PipController.detach(this)
+        super.onDestroy()
+    }
+
     @OptIn(ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // 非外网抛异常
-        firebaseAnalytics = runCatching {
-            Firebase.analytics
-        }.getOrNull()
+
+        PipController.attach(this)
+
         setContentView(FrameLayout(this))
         SplashActivity.lastSplashActivity?.get()?.finish()
         Scheduler.runOnMainActivityCreate(this, first)
@@ -76,8 +103,7 @@ class MainActivity : ComponentActivity() {
                 Scheduler.runOnComposeLaunch(this@MainActivity)
             }
             CompositionLocalProvider(
-                LocalWindowSizeController provides windowClazz,
-                LocalFirebaseAnalytics provides firebaseAnalytics
+                LocalWindowSizeController provides windowClazz
             ) {
                 EasyTheme {
                     if(isMigrating){

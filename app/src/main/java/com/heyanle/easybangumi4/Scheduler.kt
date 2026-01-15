@@ -27,7 +27,6 @@ import com.heyanle.inject.core.Inject
 import com.heyanle.okkv2.MMKVStore
 import com.heyanle.okkv2.core.Okkv
 import com.heyanle.okkv2.core.okkv
-import com.tencent.bugly.crashreport.CrashReport
 import java.io.File
 import javax.net.ssl.HttpsURLConnection
 
@@ -78,7 +77,6 @@ object Scheduler {
         StorageModule(application).registerWith(Inject)
         DlnaModule(application).registerWith(Inject)
         initOkkv(application)
-        initBugly(application)
         initAria(application)
 
         SourceCrashController.init(application, Inject.get())
@@ -156,15 +154,6 @@ object Scheduler {
     private fun initTrustAllHost() {
         HttpsURLConnection.setDefaultSSLSocketFactory(CropUtil.getUnsafeSslSocketFactory())
         HttpsURLConnection.setDefaultHostnameVerifier(TrustAllHostnameVerifier())
-    }
-
-    private fun initBugly(application: Application) {
-        if (!BuildConfig.DEBUG) {
-            CrashReport.initCrashReport(application)
-            CrashReport.setDeviceModel(application, android.os.Build.MODEL)
-            CrashReport.setDeviceId(application, UUIDHelper.getUUID())
-
-        }
     }
 
     /**

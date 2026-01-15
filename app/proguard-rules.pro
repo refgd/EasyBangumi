@@ -34,10 +34,6 @@
 
 -keep class org.apache.commons.**{*;}
 -keep interface org.apache.commons.**{*;}
-# bugly
-
--dontwarn com.tencent.bugly.**
--keep public class com.tencent.bugly.**{*;}
 
 # cybergarage
 -keep class org.cybergarage.**{*;}

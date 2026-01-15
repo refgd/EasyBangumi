@@ -1,6 +1,6 @@
 [submodule "EasyPlayer2"]
 	path = EasyPlayer2
-	url = https://github.com/easybangumiorg/EasyPlayer2.git
+	url = https://github.com/refgd/EasyPlayer2.git
 [submodule "EasyMediaTransformer"]
 	path = EasyMediaTransformer
 	url = https://github.com/easybangumiorg/EasyMediaTransformer.git

@@ -45,16 +45,8 @@ android {
             useSupportLibrary = true
         }
 
-        manifestPlaceholders["bugly_appid"] =
-            publishingProps.getProperty("bugly_appid", System.getenv("BUGLY_APPID")?:"")
-        manifestPlaceholders["bugly_app_version"] = Android.versionName
-        manifestPlaceholders["bugly_app_channel"] = "github"
-        manifestPlaceholders["package_name"] = "com.refgd.easybangumi4"
         manifestPlaceholders["label_res"] = "@string/the_app_name"
         manifestPlaceholders["is_release"] = true
-
-        // bugly 调试模式
-        manifestPlaceholders["bugly_is_debug"] = false
 
         ksp {
             arg("room.generateKotlin", "true")
@@ -62,16 +54,6 @@ android {
         }
 
     }
-
-//    splits {
-//
-//        abi {
-//            isEnable = true
-//            reset()
-//            include("arm64-v8a", "armeabi-v7a")
-//            isUniversalApk = true
-//        }
-//    }
 
     sourceSets {
         // Adds exported schema location as test app assets.
@@ -85,26 +67,19 @@ android {
 
     buildTypes {
         debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+
             isMinifyEnabled = false
             isShrinkResources = false
             proguardFiles("proguard-rules.pro")
 
-            buildConfig()
-
-//            configure<CrashlyticsExtension> {
-//                mappingFileUploadEnabled = false
-//            }
+            resValue("string", "the_app_name", "纯纯看看 Debug")
         }
         release {
             isMinifyEnabled = true
             isShrinkResources = false
             proguardFiles("proguard-rules.pro")
-
-            buildConfig()
-
-//            configure<CrashlyticsExtension> {
-//                mappingFileUploadEnabled = false
-//            }
         }
     }
     compileOptions {
@@ -128,42 +103,6 @@ android {
     composeOptions {
         kotlinCompilerExtensionVersion = build.versions.compose.compiler.get()
     }
-
-}
-
-fun VariantDimension.buildConfig(){
-
-//    // thanks
-//    val donatezfb = project.rootProject.file("thanks_zfb.jpg")
-//    val donatewx = project.rootProject.file("thanks_wx.png")
-//
-//    val zfbBase = com.heyanle.buildsrc.Base64Util.encodeImgageToBase64(donatezfb) ?: ""
-//    val wxBase = com.heyanle.buildsrc.Base64Util.encodeImgageToBase64(donatewx) ?: ""
-//
-//    buildConfigField("String", "donateZfbBase64", "\"${zfbBase}\"")
-//    buildConfigField("String", "wxBase", "\"${wxBase}\"")
-//
-//    val update = try {
-//        // update log
-//        val readMeFile = project.rootProject.file("README.md")
-//        val stringBuilder = StringBuilder()
-//        var isInUpdate = false
-//        for (readLine in readMeFile.readLines()) {
-//            if (readLine.startsWith("# 更新列表 ")){
-//                isInUpdate = !isInUpdate
-//                continue
-//            }
-//            if (isInUpdate){
-//                stringBuilder.append(readLine.trim()).append("\\n")
-//            }
-//
-//        }
-//        stringBuilder.toString()
-//    }catch (e: Throwable){
-//        e.printStackTrace()
-//        ""
-//    }
-//    buildConfigField("String", "updateLog", "\"${update}\"")
 
 }
 
@@ -257,8 +196,6 @@ dependencies {
 
     implementation(libs.zip4j)
 
-    implementation(libs.bugly)
-
     // fimplementation(gecko.gecko)
 
     implementation(libs.aria.m3u8)
@@ -273,10 +210,5 @@ dependencies {
     implementation(project(":EasyMediaTransformer:easy_transformer"))
 
     implementation(libs.uni.file)
-
-    implementation(platform("com.google.firebase:firebase-bom:33.1.2"))
-    implementation("com.google.firebase:firebase-crashlytics-ktx")
-    implementation("com.google.firebase:firebase-analytics-ktx")
-
 
 }

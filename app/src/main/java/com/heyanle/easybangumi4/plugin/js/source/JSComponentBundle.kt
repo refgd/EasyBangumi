@@ -34,6 +34,8 @@ import com.heyanle.easybangumi4.utils.logi
 import com.heyanle.inject.api.get
 import com.heyanle.inject.core.Inject
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.lang.reflect.Proxy
 import kotlin.reflect.KClass
@@ -48,16 +50,25 @@ class JSComponentBundle(
 
     private val bundle: HashMap<KClass<*>, Any> = hashMapOf()
     private val componentProxy:  HashMap<KClass<*>, Any> = hashMapOf()
-    private var inited: Boolean = false
+
+    private val initMutex = Mutex()
+    @Volatile private var inited = false
 
     @WorkerThread
     override suspend fun init() {
 
     }
 
-    private suspend fun _init() {
-        this.inited = true
+    private suspend fun ensureInit() {
+        if (inited) return
+        initMutex.withLock {
+            if (inited) return@withLock
+            initInternal()
+            inited = true
+        }
+    }
 
+    private suspend fun initInternal() {
         jsSource.key.logi("JsIInit")
 
         // 1. 注入工具类
@@ -197,7 +208,7 @@ class JSComponentBundle(
     }
 
     override suspend fun getComponentProxy(clazz: KClass<*>): Any? {
-        if(!this.inited) this._init();
+        ensureInit()
 
         val o = componentProxy[clazz]
         if (o == null){

@@ -48,8 +48,6 @@ org-jetbrains-kotlin-jvm = "1.9.23"
 
 zip4j = "2.11.5"
 
-bugly = "4.1.9.3"
-
 xcrash = "3.0.0"
 
 uni_file = "1.0.0"
@@ -125,8 +123,6 @@ cybergarage-upnp-std = { group = "org.cybergarage.upnp", name = "std", version.r
 cybergarage-upnp-core = { group = "org.cybergarage.upnp", name = "core", version.ref = "cybergarage-upnp"  }
 
 zip4j = { module = "net.lingala.zip4j:zip4j", version.ref = "zip4j" }
-
-bugly = {module = "com.tencent.bugly:crashreport", version.ref = "bugly" }
 
 xcrash = {module = "com.iqiyi.xcrash:xcrash-android-lib", version.ref = "xcrash"}
 
