@@ -7,10 +7,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
@@ -30,11 +34,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.util.UnstableApi
@@ -44,6 +51,7 @@ import com.heyanle.easybangumi4.cartoon.entity.CartoonInfo
 import com.heyanle.easybangumi4.cartoon.entity.PlayLineWrapper
 import com.heyanle.easybangumi4.navigationCartoonTag
 import com.heyanle.easybangumi4.navigationSearch
+import com.heyanle.easybangumi4.pip.PipController
 import com.heyanle.easybangumi4.plugin.api.entity.CartoonSummary
 import com.heyanle.easybangumi4.plugin.api.entity.Episode
 import com.heyanle.easybangumi4.setting.SettingPreferences
@@ -70,9 +78,6 @@ import loli.ball.easyplayer2.ControlViewModel
 import loli.ball.easyplayer2.ControlViewModelFactory
 import loli.ball.easyplayer2.EasyPlayerScaffoldBase
 import loli.ball.easyplayer2.EasyPlayerStateSync
-import androidx.compose.ui.platform.LocalContext
-import com.heyanle.easybangumi4.MainActivity
-import com.heyanle.easybangumi4.pip.PipController
 
 /**
  * Created by heyanle on 2023/12/17.
@@ -395,6 +400,86 @@ val speedConfig = linkedMapOf(
     "0.5X" to 0.5f,
 )
 
+@OptIn(UnstableApi::class)
+@Composable
+private fun PipProgressBar(
+    vm: ControlViewModel,
+) {
+    val position =
+        when (vm.controlState) {
+            ControlViewModel.ControlState.Normal -> vm.position
+            ControlViewModel.ControlState.HorizontalScroll -> vm.horizontalScrollPosition
+            else -> 0
+        }
+
+    var widthPx by remember { mutableStateOf(0) }
+
+    val progress = if (vm.during > 0L) {
+        (position.toFloat() / vm.during.toFloat()).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        Box(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(Color.Black.copy(alpha = 0.8f))
+        ) {
+            Box(
+                Modifier
+                    .fillMaxWidth(progress)
+                    .height(1.dp)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.8f))
+            )
+        }
+    }
+
+//    Box(Modifier.fillMaxSize()) {
+//        Box(
+//            Modifier
+//                .align(Alignment.BottomCenter)
+//                .fillMaxWidth()
+//                .height(8.dp) // 给圆点留高度
+//                .onSizeChanged { widthPx = it.width }
+//        ) {
+//            // 背景线
+//            Box(
+//                Modifier
+//                    .align(Alignment.CenterStart)
+//                    .fillMaxWidth()
+//                    .height(2.dp)
+//                    .background(Color.White.copy(alpha = 0.8f))
+//            )
+//
+//            // 已播放线
+//            Box(
+//                Modifier
+//                    .align(Alignment.CenterStart)
+//                    .fillMaxWidth(progress)
+//                    .height(2.dp)
+//                    .background(MaterialTheme.colorScheme.primary)
+//            )
+//
+//            // 圆点
+//            Box(
+//                Modifier
+//                    .align(Alignment.CenterStart)
+//                    .offset {
+//                        IntOffset(
+//                            x = (progress * widthPx).toInt() - 3.dp.roundToPx(),
+//                            y = 0
+//                        )
+//                    }
+//                    .size(6.dp)
+//                    .background(MaterialTheme.colorScheme.primary, CircleShape)
+//            )
+//        }
+//    }
+}
+
 
 @SuppressLint("NewApi")
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
@@ -489,6 +574,10 @@ fun CartoonPlay(
             }
         },
         control = {
+             if (isInPip) {
+                 PipProgressBar(controlVM)
+             }
+
             if (!isInPip) {
                 VideoControl(
                     controlVM = controlVM,

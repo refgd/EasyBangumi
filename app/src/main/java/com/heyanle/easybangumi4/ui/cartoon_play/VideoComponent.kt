@@ -65,6 +65,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
@@ -121,6 +122,7 @@ import loli.ball.easyplayer2.TimeText
 import loli.ball.easyplayer2.TopControl
 import loli.ball.easyplayer2.ViewSeekBar
 import loli.ball.easyplayer2.utils.rememberBatteryReceiver
+import android.text.format.DateFormat
 
 /**
  * Created by heyanle on 2023/12/17.
@@ -760,6 +762,32 @@ fun FullScreenRightToolBar(
 }
 
 @Composable
+private fun CurrentTimeText() {
+    val context = LocalContext.current
+    val currentTime = remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            val is24Hour = DateFormat.is24HourFormat(context)
+            val pattern = if (is24Hour) "HH:mm" else "h:mm a"
+
+            currentTime.value = DateFormat
+                .format(pattern, System.currentTimeMillis())
+                .toString()
+
+            val now = System.currentTimeMillis()
+            delay(60_000L - now % 60_000L)
+        }
+    }
+
+    Text(
+        text = currentTime.value,
+        color = Color.White,
+        style = MaterialTheme.typography.bodyMedium
+    )
+}
+
+@Composable
 fun FullScreenVideoTopBar(
     vm: ControlViewModel,
     modifier: Modifier = Modifier,
@@ -808,6 +836,10 @@ fun FullScreenVideoTopBar(
                     Icons.Filled.BatteryFull
                 }
             }
+
+            CurrentTimeText()
+            Spacer(modifier = Modifier.size(12.dp))
+
             Icon(ic, "el", modifier = Modifier.rotate(90F), tint = Color.White)
             Text(text = "${br.electricity.value}%", color = Color.White)
             Spacer(modifier = Modifier.size(16.dp))
