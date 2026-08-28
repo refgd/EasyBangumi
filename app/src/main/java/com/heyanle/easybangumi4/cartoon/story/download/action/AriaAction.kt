@@ -23,6 +23,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.net.URI
 import java.net.URL
+import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.regex.Pattern
 
@@ -289,19 +290,69 @@ class AriaAction(
         subStatus: String? = null,
     ) {
 
-        val process = if (task.entity?.m3U8Entity != null) {
-            // m3u8 无解
-            -1f
-        } else {
-            if ((task.entity.fileSize) <= 0L) -1f else ((task.entity.percent) / 100f)
+        val entity = task.entity
+        val process = when {
+            entity == null -> -1f
+            entity.percent in 0..100 -> entity.percent / 100f
+            entity.fileSize > 0L -> entity.currentProgress / entity.fileSize.toFloat()
+            else -> -1f
         }
 
         dispatchToBus(
             process,
             status,
-            subStatus ?: if (task.entity.fileSize > 0L) task.convertSpeed?:"" else task.convertCurrentProgress ?:""
+            subStatus ?: task.downloadDetail()
         )
     }
+
+    private fun DownloadTask.downloadDetail(): String {
+        val entity = this.entity ?: return ""
+        val detail = arrayListOf<String>()
+        if (entity.m3U8Entity != null) {
+            detail.add("HLS/m3u8")
+            val peerNum = entity.m3U8Entity.peerNum
+            val peerIndex = entity.m3U8Entity.peerIndex
+            if (peerNum > 0) {
+                detail.add("分片 $peerIndex/$peerNum")
+            }
+            val method = entity.m3U8Entity.method
+            if (!method.isNullOrBlank()) {
+                detail.add(method)
+            }
+        } else {
+            detail.add("MP4")
+        }
+        val current = entity.currentProgress
+        val total = entity.fileSize
+        if (total > 0L) {
+            detail.add("${current.formatBytes()}/${total.formatBytes()}")
+        } else if (current > 0L) {
+            detail.add(current.formatBytes())
+        } else {
+            convertCurrentProgress?.takeIf { it.isNotBlank() }?.let(detail::add)
+        }
+        val speed = convertSpeed?.takeIf { it.isNotBlank() } ?: "${entity.speed.formatBytes()}/s"
+        detail.add(speed)
+        if (entity.percent in 0..100) {
+            detail.add("${entity.percent}%")
+        }
+        return detail.joinToString(" | ")
+    }
+
+    private fun Long.formatBytes(): String {
+        if (this < 1024L) {
+            return "$this B"
+        }
+        val units = arrayOf("KB", "MB", "GB", "TB")
+        var value = this.toDouble()
+        var unitIndex = -1
+        do {
+            value /= 1024.0
+            unitIndex++
+        } while (value >= 1024.0 && unitIndex < units.lastIndex)
+        return String.format(Locale.US, "%.1f %s", value, units[unitIndex])
+    }
+
     private fun DownloadReceiver.getFirstTaskWithExt(
         ext: String
     ): DownloadEntity? {

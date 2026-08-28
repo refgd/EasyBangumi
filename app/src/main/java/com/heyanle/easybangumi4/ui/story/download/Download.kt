@@ -281,9 +281,8 @@ fun DownloadItem(
                 color = if (isSelect) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onBackground
             )
             Spacer(modifier = Modifier.weight(1f))
-            Row(
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
             ) {
 
                 if (downloadItem.runtime == null){
@@ -297,11 +296,13 @@ fun DownloadItem(
                     Text(
                         info.status.value,
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         color = if (isSelect) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onBackground
                     )
                     Text(
                         info.subStatus.value,
-                        maxLines = 1,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                         color = if (isSelect) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onBackground
                     )
 

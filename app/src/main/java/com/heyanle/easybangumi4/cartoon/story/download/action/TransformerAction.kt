@@ -25,6 +25,7 @@ import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.io.File
+import java.util.Locale
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.SynchronousQueue
@@ -43,6 +44,7 @@ class TransformerAction(
 
     companion object {
         const val NAME = "TransformerAction"
+        private const val MAX_DELAY_BETWEEN_MUXER_SAMPLES_MS = 30_000
     }
 
     private val cacheFolder = File(APP.getCachePath("transformer"))
@@ -72,9 +74,7 @@ class TransformerAction(
     }
 
     override suspend fun canResume(cartoonDownloadReq: CartoonDownloadReq): Boolean {
-        // 文件最终是改名，只要存在就一定已完成
-        val realTarget = File(cacheFolder, "${cartoonDownloadReq.uuid}.mp4")
-        return realTarget.exists() && realTarget.isFile && realTarget.canRead() && realTarget.length() > 0
+        return cartoonDownloadReq.isTransformCompleted()
     }
 
     override suspend fun toggle(cartoonDownloadRuntime: CartoonDownloadRuntime): Boolean {
@@ -82,8 +82,8 @@ class TransformerAction(
     }
 
     override fun push(cartoonDownloadRuntime: CartoonDownloadRuntime) {
-        val realTarget = File(cacheFolder, "${cartoonDownloadRuntime.req.uuid}.mp4")
-        if ( realTarget.exists() && realTarget.isFile && realTarget.canRead() && realTarget.length() > 0) {
+        val realTarget = cartoonDownloadRuntime.req.transformTarget()
+        if (cartoonDownloadRuntime.req.isTransformCompleted()) {
             cartoonDownloadRuntime.filePathBeforeCopy = realTarget.absolutePath
             cartoonDownloadRuntime.stepCompletely(this)
             return
@@ -146,7 +146,7 @@ class TransformerAction(
                     )
                 )
                 .setMuxerFactory(InAppMuxer.Factory.Builder().build())
-                .setMaxDelayBetweenMuxerSamplesMs(500000)
+                .setMaxDelayBetweenMuxerSamplesMs(MAX_DELAY_BETWEEN_MUXER_SAMPLES_MS)
                 .addListener(object : Transformer.Listener {
                     override fun onCompleted(composition: Composition, exportResult: ExportResult) {
                         super.onCompleted(composition, exportResult)
@@ -170,22 +170,31 @@ class TransformerAction(
             cartoonDownloadRuntime.transformer = transformer
 
 
-            val realTarget = File(cacheFolder, "${cartoonDownloadRuntime.req.uuid}.mp4")
+            val realTarget = cartoonDownloadRuntime.req.transformTarget()
+            val tempTarget = cartoonDownloadRuntime.req.transformTempTarget()
+            val doneTarget = cartoonDownloadRuntime.req.transformDoneTarget()
             cacheFolder.mkdirs()
-            realTarget.delete()
-            realTarget.createNewFile()
+            doneTarget.delete()
+            tempTarget.delete()
+            tempTarget.createNewFile()
 
-            cartoonDownloadRuntime.transformerFile = realTarget
+            cartoonDownloadRuntime.transformerFile = tempTarget
 
             val holder: ProgressHolder = ProgressHolder()
+            val inputFormat = playerInfo.decodeType.toInputFormatName()
+            val outputFormat = encodeType.toOutputFormatName()
+            var lastProgressBytes = 0L
+            var lastProgressTime = System.currentTimeMillis()
+            var lastChangedTime = lastProgressTime
             mainScope.launch {
                 cartoonDownloadRuntime.dispatchToBus(
                     -1f,
-                    stringRes(com.heyanle.easy_i18n.R.string.waiting_transformer)
+                    stringRes(com.heyanle.easy_i18n.R.string.waiting_transformer),
+                    "$inputFormat -> $outputFormat"
                 )
                 transformer.start(
                     mediaItem,
-                    realTarget.absolutePath
+                    tempTarget.absolutePath
                 )
                 initLatch.countDown()
             }
@@ -196,6 +205,8 @@ class TransformerAction(
                     mainScope.launch {
                         transformer.cancel()
                     }
+                    tempTarget.delete()
+                    doneTarget.delete()
                     completelyLatch.countDown()
                     return
                 }
@@ -206,11 +217,27 @@ class TransformerAction(
                     } else {
                         -1
                     }
+                    val outputBytes = tempTarget.length()
+                    val now = System.currentTimeMillis()
+                    val elapsedMs = (now - lastProgressTime).coerceAtLeast(1L)
+                    val speedBytes = ((outputBytes - lastProgressBytes).coerceAtLeast(0L) * 1000L) / elapsedMs
+                    if (outputBytes > lastProgressBytes) {
+                        lastChangedTime = now
+                    }
                     cartoonDownloadRuntime.dispatchToBus(
                         progress.toFloat() / 100f,
                         stringRes(com.heyanle.easy_i18n.R.string.downloading),
-                        if(progress >= 0) "${progress.toInt()}%" else ""
+                        transformerDetail(
+                            inputFormat,
+                            outputFormat,
+                            outputBytes,
+                            progress,
+                            speedBytes,
+                            now - lastChangedTime,
+                        )
                     )
+                    lastProgressBytes = outputBytes
+                    lastProgressTime = now
                 }
 
                 completelyLatch.await(1, TimeUnit.SECONDS)
@@ -220,21 +247,124 @@ class TransformerAction(
                 mainScope.launch {
                     transformer.cancel()
                 }
+                tempTarget.delete()
+                doneTarget.delete()
                 cartoonDownloadRuntime.error(
                     cartoonDownloadRuntime.exportException,
-                    cartoonDownloadRuntime.exportException?.message
+                    cartoonDownloadRuntime.exportException?.downloadErrorMessage()
                 )
             } else {
+                realTarget.delete()
+                if (!tempTarget.renameTo(realTarget)) {
+                    tempTarget.copyTo(realTarget, overwrite = true)
+                    tempTarget.delete()
+                }
+                doneTarget.createNewFile()
                 cartoonDownloadRuntime.filePathBeforeCopy = realTarget.absolutePath
                 cartoonDownloadRuntime.stepCompletely(this)
             }
 
         } catch (e: Throwable) {
+            cartoonDownloadRuntime.transformerFile?.delete()
+            cartoonDownloadRuntime.req.transformDoneTarget().delete()
             cartoonDownloadRuntime.error(
                 e,
-                e.message
+                e.downloadErrorMessage()
             )
         }
+    }
+
+    private fun CartoonDownloadReq.transformTarget(): File {
+        return File(cacheFolder, "$uuid.mp4")
+    }
+
+    private fun CartoonDownloadReq.transformTempTarget(): File {
+        return File(cacheFolder, "$uuid.mp4.part")
+    }
+
+    private fun CartoonDownloadReq.transformDoneTarget(): File {
+        return File(cacheFolder, "$uuid.mp4.done")
+    }
+
+    private fun CartoonDownloadReq.isTransformCompleted(): Boolean {
+        val realTarget = transformTarget()
+        val doneTarget = transformDoneTarget()
+        return doneTarget.exists() &&
+                realTarget.exists() &&
+                realTarget.isFile &&
+                realTarget.canRead() &&
+                realTarget.length() > 0
+    }
+
+    private fun Throwable.downloadErrorMessage(): String {
+        if (hasMessageContaining("no output sample")) {
+            return "普通模式没有解出可保存的视频数据，可能是该 m3u8 分片无视频帧、格式不兼容或源返回了异常内容"
+        }
+        val messages = generateSequence(this as Throwable?) { it.cause }
+            .mapNotNull { it.message?.takeIf(String::isNotBlank) }
+            .distinct()
+            .toList()
+        return messages.joinToString(": ").ifBlank {
+            stringRes(com.heyanle.easy_i18n.R.string.download_error)
+        }
+    }
+
+    private fun Throwable.hasMessageContaining(text: String): Boolean {
+        return generateSequence(this as Throwable?) { it.cause }
+            .any { it.message?.contains(text, ignoreCase = true) == true }
+    }
+
+    private fun transformerDetail(
+        inputFormat: String,
+        outputFormat: String,
+        outputBytes: Long,
+        progress: Int,
+        speedBytes: Long,
+        stagnantMs: Long,
+    ): String {
+        val detail = arrayListOf("$inputFormat -> $outputFormat")
+        if (outputBytes > 0L) {
+            detail.add("已输出 ${outputBytes.formatBytes()}")
+        }
+        detail.add("${speedBytes.formatBytes()}/s")
+        if (stagnantMs >= 5000L) {
+            detail.add("无写入 ${stagnantMs / 1000}s")
+        }
+        if (progress >= 0) {
+            detail.add("$progress%")
+        } else {
+            detail.add("总大小未知")
+        }
+        return detail.joinToString(" | ")
+    }
+
+    private fun Int.toInputFormatName(): String {
+        return when (this) {
+            com.heyanle.easybangumi4.plugin.api.entity.PlayerInfo.DECODE_TYPE_DASH -> "DASH"
+            com.heyanle.easybangumi4.plugin.api.entity.PlayerInfo.DECODE_TYPE_HLS -> "HLS/m3u8"
+            else -> "MP4/直链"
+        }
+    }
+
+    private fun CartoonDownloadPreference.DownloadEncode.toOutputFormatName(): String {
+        return when (this) {
+            CartoonDownloadPreference.DownloadEncode.H264 -> "H.264 MP4"
+            else -> "H.265 MP4"
+        }
+    }
+
+    private fun Long.formatBytes(): String {
+        if (this < 1024L) {
+            return "$this B"
+        }
+        val units = arrayOf("KB", "MB", "GB", "TB")
+        var value = this.toDouble()
+        var unitIndex = -1
+        do {
+            value /= 1024.0
+            unitIndex++
+        } while (value >= 1024.0 && unitIndex < units.lastIndex)
+        return String.format(Locale.US, "%.1f %s", value, units[unitIndex])
     }
 
     override fun onCancel(cartoonDownloadRuntime: CartoonDownloadRuntime) {
@@ -246,6 +376,7 @@ class TransformerAction(
         }
         mainScope.launch {
             cartoonDownloadRuntime.transformer?.cancel()
+            cartoonDownloadRuntime.transformerFile?.delete()
         }
     }
 
