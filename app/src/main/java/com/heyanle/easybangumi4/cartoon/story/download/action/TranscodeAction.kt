@@ -51,49 +51,58 @@ class TranscodeAction(
     private fun innerRun(
         cartoonDownloadRuntime: CartoonDownloadRuntime
     ) {
-        synchronized(cartoonDownloadRuntime.lock) {
-            try {
-                if (!decrypt(cartoonDownloadRuntime)) {
+        try {
+            if (cartoonDownloadRuntime.isCanceled() || cartoonDownloadRuntime.isError()) {
+                return
+            }
+            if (!decrypt(cartoonDownloadRuntime)) {
+                synchronized(cartoonDownloadRuntime.lock) {
                     cartoonDownloadRuntime.error(
                         errorMsg = stringRes(com.heyanle.easy_i18n.R.string.decrypt_error),
                         error = IOException("Decrypt failed")
                     )
-                    return
                 }
-                if (
-                    !ffmpeg(
-                        cartoonDownloadRuntime,
-                        // 回调为异步，需要重新获取锁
-                        onCompletely = {
-                            synchronized(cartoonDownloadRuntime.lock) {
-                                cartoonDownloadRuntime.filePathBeforeCopy =
-                                    cartoonDownloadRuntime.ffmpegFile?.absolutePath ?: ""
-                                cartoonDownloadRuntime.stepCompletely(this)
-                            }
-                        },
-                        onError = {
-                            synchronized(cartoonDownloadRuntime.lock) {
-                                cartoonDownloadRuntime.error(
-                                    errorMsg = stringRes(com.heyanle.easy_i18n.R.string.transcode_error),
-                                    error = it
-                                )
-                            }
+                return
+            }
+            if (cartoonDownloadRuntime.isCanceled() || cartoonDownloadRuntime.isError()) {
+                return
+            }
+            if (
+                !ffmpeg(
+                    cartoonDownloadRuntime,
+                    // 回调为异步，需要重新获取锁
+                    onCompletely = {
+                        synchronized(cartoonDownloadRuntime.lock) {
+                            cartoonDownloadRuntime.filePathBeforeCopy =
+                                cartoonDownloadRuntime.ffmpegFile?.absolutePath ?: ""
+                            cartoonDownloadRuntime.stepCompletely(this)
                         }
-                    )
-                ) {
+                    },
+                    onError = {
+                        synchronized(cartoonDownloadRuntime.lock) {
+                            cartoonDownloadRuntime.error(
+                                errorMsg = stringRes(com.heyanle.easy_i18n.R.string.transcode_error).withErrorMessage(it),
+                                error = it
+                            )
+                        }
+                    }
+                )
+            ) {
+                synchronized(cartoonDownloadRuntime.lock) {
                     cartoonDownloadRuntime.error(
                         errorMsg = stringRes(com.heyanle.easy_i18n.R.string.decrypt_error),
                         error = IOException("Decrypt failed")
                     )
-                    return
                 }
-            }catch (e: Throwable){
+                return
+            }
+        }catch (e: Throwable){
+            synchronized(cartoonDownloadRuntime.lock) {
                 cartoonDownloadRuntime.error(
-                    errorMsg = stringRes(com.heyanle.easy_i18n.R.string.transcode_error),
+                    errorMsg = stringRes(com.heyanle.easy_i18n.R.string.transcode_error).withErrorMessage(e),
                     error = e
                 )
             }
-
         }
 
     }
@@ -170,18 +179,20 @@ class TranscodeAction(
         }
         target.deleteOnExit()
         // 这里改名是原子操作，只要文件存在就一定成功
-        cartoonDownloadRuntime.decryptFile = realTarget
+        synchronized(cartoonDownloadRuntime.lock) {
+            cartoonDownloadRuntime.decryptFile = realTarget
+        }
         scope.launch {
-            cartoonDownloadRuntime.dispatchToBus(
+            cartoonDownloadRuntime.dispatchToBusThrottled(
                 -1f,
                 stringRes(com.heyanle.easy_i18n.R.string.decrypting),
+                force = true,
             )
         }
         // 将本地 m3u8 文件中的 ts 全都解密改写成 tsh 文件
         // 输出新的 m3u8 文件，去除 key 标签，文件路径改为 tsh
         // 如果 tsh 文件的文件头是 png，则去除文件头
         val it = localM3U8.readLines().iterator()
-        val writer = target.writer(Charsets.UTF_8).buffered()
         val tsFiles = arrayListOf<File>()
         val targetTsFiles = arrayListOf<File>()
         val memoryInfo = EasyMemoryInfo(application)
@@ -193,39 +204,41 @@ class TranscodeAction(
             return true
         }
         try {
-            while (it.hasNext()) {
-                val line = it.next()
-                if (line.startsWith("#EXTINF")) {
-                    if (!it.hasNext()) {
-                        return false
-                    } else {
-                        val ts = it.next()
-                        val file = File(ts)
-                        val targetFile = File("${ts}h")
-                        // 如果大于当前可用内存 80% 以上就不解了直接丢 ffmpeg 然后祈祷他没有改文件头
-                        memoryInfo.update()
-                        if (memoryInfo.availMem * 0.8 <= file.length()
-                            || (Runtime.getRuntime()?.freeMemory()
-                                ?: Long.MAX_VALUE) * 0.8 <= file.length()
-                        ) {
-                            realTarget.delete()
-                            localM3U8.renameTo(realTarget)
-                            return true
+            target.writer(Charsets.UTF_8).buffered().use { writer ->
+                while (it.hasNext()) {
+                    val line = it.next()
+                    if (line.startsWith("#EXTINF")) {
+                        if (!it.hasNext()) {
+                            return false
+                        } else {
+                            val ts = it.next()
+                            val file = File(ts)
+                            val targetFile = File("${ts}h")
+                            // 如果大于当前可用内存 80% 以上就不解了直接丢 ffmpeg 然后祈祷他没有改文件头
+                            memoryInfo.update()
+                            if (memoryInfo.availMem * 0.8 <= file.length()
+                                || (Runtime.getRuntime()?.freeMemory()
+                                    ?: Long.MAX_VALUE) * 0.8 <= file.length()
+                            ) {
+                                realTarget.delete()
+                                localM3U8.renameTo(realTarget)
+                                return true
+                            }
+                            tsFiles.add(file)
+                            // ts -> tsh
+                            targetTsFiles.add(targetFile)
+                            writer.write(line)
+                            writer.newLine()
+                            writer.write(targetFile.absolutePath)
+                            writer.newLine()
                         }
-                        tsFiles.add(file)
-                        // ts -> tsh
-                        targetTsFiles.add(targetFile)
+                    } else if (line.startsWith("#EXT-X-KEY")) {
+                        // 新的 m3u8 文件不用解密了
+                        continue
+                    } else {
                         writer.write(line)
                         writer.newLine()
-                        writer.write(targetFile.absolutePath)
-                        writer.newLine()
                     }
-                } else if (line.startsWith("#EXT-X-KEY")) {
-                    // 新的 m3u8 文件不用解密了
-                    continue
-                } else {
-                    writer.write(line)
-                    writer.newLine()
                 }
             }
         } catch (e: OutOfMemoryError) {
@@ -239,28 +252,39 @@ class TranscodeAction(
             // 解密失败
             return false
         }
-        writer.flush()
 
         // 开始解密咯！
-        val needDecrypt = !entity.method.isNullOrEmpty()
-        val keyFile = File(entity.filePath)
-        val keyB = keyFile.readBytes()
+        val needDecrypt = entity.method?.contains("AES", ignoreCase = true) == true
+        val keyB = if (needDecrypt) {
+            val keyPath = entity.keyPath
+            if (keyPath.isNullOrEmpty()) {
+                throw IOException("m3u8 key path is empty")
+            }
+            val keyFile = File(keyPath)
+            if (!keyFile.exists() || !keyFile.canRead()) {
+                throw IOException("m3u8 key file can not read: $keyPath")
+            }
+            keyFile.readBytes()
+        } else {
+            ByteArray(0)
+        }
 
         scope.launch {
-            cartoonDownloadRuntime.dispatchToBus(
+            cartoonDownloadRuntime.dispatchToBusThrottled(
                 -1f,
                 stringRes(com.heyanle.easy_i18n.R.string.decrypting),
-                "0/${tsFiles.size}"
+                "0/${tsFiles.size}",
+                force = true,
             )
         }
         for (i in 0 until tsFiles.size.coerceAtMost(targetTsFiles.size)) {
             scope.launch {
-                cartoonDownloadRuntime.dispatchToBus(
+                cartoonDownloadRuntime.dispatchToBusThrottled(
                     if (tsFiles.size == 0) 0f else {
                         (i + 1) / (tsFiles.size).toFloat()
                     },
                     stringRes(com.heyanle.easy_i18n.R.string.decrypting),
-                    "${i + 1}/${tsFiles.size}"
+                    "${i + 1}/${tsFiles.size}",
                 )
             }
 
@@ -316,12 +340,15 @@ class TranscodeAction(
         }
         val realTarget = File(ffmpegCacheFolder, "${cartoonDownloadRuntime.req.uuid}.mp4")
         ffmpegCacheFolder.mkdirs()
-        cartoonDownloadRuntime.ffmpegFile = realTarget
+        synchronized(cartoonDownloadRuntime.lock) {
+            cartoonDownloadRuntime.ffmpegFile = realTarget
+        }
         val target = File(ffmpegCacheFolder, realTarget.name + ".temp.mp4")
         scope.launch {
-            cartoonDownloadRuntime.dispatchToBus(
+            cartoonDownloadRuntime.dispatchToBusThrottled(
                 0f,
-                stringRes(com.heyanle.easy_i18n.R.string.transcoding)
+                stringRes(com.heyanle.easy_i18n.R.string.transcoding),
+                force = true,
             )
         }
 
@@ -331,7 +358,7 @@ class TranscodeAction(
             object : IVideoTransformListener {
                 override fun onTransformProgress(progress: Float) {
                     scope.launch {
-                        cartoonDownloadRuntime.dispatchToBus(
+                        cartoonDownloadRuntime.dispatchToBusThrottled(
                             progress,
                             stringRes(com.heyanle.easy_i18n.R.string.transcoding),
                             "${(progress).toInt()}%"
@@ -352,6 +379,11 @@ class TranscodeAction(
             }
         )
         return true
+    }
+
+    private fun String.withErrorMessage(error: Throwable?): String {
+        val message = error?.message?.takeIf { it.isNotBlank() } ?: return this
+        return "$this: $message"
     }
 
 }

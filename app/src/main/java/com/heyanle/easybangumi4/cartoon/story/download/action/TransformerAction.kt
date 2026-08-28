@@ -44,7 +44,7 @@ class TransformerAction(
 
     companion object {
         const val NAME = "TransformerAction"
-        private const val MAX_DELAY_BETWEEN_MUXER_SAMPLES_MS = 30_000
+        private const val MAX_DELAY_BETWEEN_MUXER_SAMPLES_MS = 30_000L
     }
 
     private val cacheFolder = File(APP.getCachePath("transformer"))

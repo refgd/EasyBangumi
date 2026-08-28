@@ -22,10 +22,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.net.URI
-import java.net.URL
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
-import java.util.regex.Pattern
 
 /**
  * Created by heyanle on 2024/8/3.
@@ -57,41 +55,6 @@ class AriaAction(
                 isConvertSpeed = true
             }
         }
-    }
-
-    private val m3u8Option = M3U8VodOption().apply {
-        setVodTsUrlConvert { m3u8Url, tsUrls ->
-            val list = arrayListOf<String>()
-            val pattern = "[0-9a-zA-Z]+[.]ts"
-            val r = Pattern.compile(pattern)
-            for (i in tsUrls.indices) {
-                val tspath = tsUrls[i]
-                if (tspath.startsWith("http://") || tspath.startsWith("https://")) {
-                    list.add(tspath)
-                } else if (r.matcher(tspath).find()) {
-                    val e = m3u8Url.lastIndexOf("/") + 1
-                    list.add(m3u8Url.substring(0, e) + tspath)
-                } else {
-                    val host = URI(m3u8Url).host
-                    list.add("$host/$tspath")
-                }
-            }
-            list
-        }
-        setBandWidthUrlConverter { m3u8Url, bandWidthUrl ->
-            if (bandWidthUrl.startsWith("http://") || bandWidthUrl.startsWith("https://")) {
-                bandWidthUrl
-            } else {
-                val url = URL(m3u8Url)
-                if (url.port == -1) {
-                    url.protocol + "://" + url.host  + "/" + bandWidthUrl
-                } else {
-                    url.protocol + "://" + url.host + ":" + url.port + "/" + bandWidthUrl
-                }
-            }
-        }
-        setUseDefConvert(false)
-        generateIndexFile()
     }
 
     // action
@@ -133,7 +96,14 @@ class AriaAction(
 
     override fun push(cartoonDownloadRuntime: CartoonDownloadRuntime) {
         "push aria action".logi("Action")
-        val entity = aria.getFirstTaskWithExt(cartoonDownloadRuntime.req.uuid)
+        val entity = aria.getFirstTaskWithExt(cartoonDownloadRuntime.req.uuid)?.let {
+            if (it.canReuse()) {
+                it
+            } else {
+                aria.load(it.id).cancel(true)
+                null
+            }
+        }
 
         File(downloadFolder).mkdirs()
         if (entity != null) {
@@ -182,7 +152,7 @@ class AriaAction(
                             }
                         })
                         .setFilePath(path)
-                        .m3u8VodOption(m3u8Option)
+                        .m3u8VodOption(playerInfo.uri.buildM3u8Option())
                         .ignoreFilePathOccupy()
                         .ignoreCheckPermissions()
                         .create()
@@ -252,8 +222,11 @@ class AriaAction(
         val entity = task?.entity ?: return
         val runtime = ariaId2Runtime[entity.id] ?: return
         synchronized(runtime.lock) {
+            val detail = task.downloadDetail()
+            val errorMsg = e?.downloadErrorMessage()
+                ?: stringRes(com.heyanle.easy_i18n.R.string.download_error)
             runtime.error(
-                errorMsg = stringRes(com.heyanle.easy_i18n.R.string.download_error),
+                errorMsg = if (detail.isBlank()) errorMsg else "$errorMsg | $detail",
                 error = e
             )
         }
@@ -276,6 +249,7 @@ class AriaAction(
         runtime.dispatchProcessToBus(
             task,
             stringRes(com.heyanle.easy_i18n.R.string.downloading),
+            throttle = true,
         )
     }
 
@@ -288,6 +262,7 @@ class AriaAction(
         status: String,
         // Null 则展示网速
         subStatus: String? = null,
+        throttle: Boolean = false,
     ) {
 
         val entity = task.entity
@@ -298,11 +273,12 @@ class AriaAction(
             else -> -1f
         }
 
-        dispatchToBus(
-            process,
-            status,
-            subStatus ?: task.downloadDetail()
-        )
+        val detail = subStatus ?: task.downloadDetail()
+        if (throttle) {
+            dispatchToBusThrottled(process, status, detail)
+        } else {
+            dispatchToBus(process, status, detail)
+        }
     }
 
     private fun DownloadTask.downloadDetail(): String {
@@ -353,6 +329,54 @@ class AriaAction(
         return String.format(Locale.US, "%.1f %s", value, units[unitIndex])
     }
 
+    private fun String.buildM3u8Option(): M3U8VodOption {
+        return M3U8VodOption().apply {
+            setVodTsUrlConvert { m3u8Url, tsUrls ->
+                val baseUrl = resolveM3u8Base(m3u8Url)
+                tsUrls.map { baseUrl.resolveM3u8Url(it) }
+            }
+            setBandWidthUrlConverter { m3u8Url, bandWidthUrl ->
+                resolveM3u8Base(m3u8Url).resolveM3u8Url(bandWidthUrl)
+            }
+            setUseDefConvert(false)
+            generateIndexFile()
+        }
+    }
+
+    private fun String.resolveM3u8Base(baseUrl: String?): String {
+        if (baseUrl.isNullOrBlank()) {
+            return this
+        }
+        return if (baseUrl.startsWith("http://") || baseUrl.startsWith("https://")) {
+            baseUrl
+        } else {
+            resolveM3u8Url(baseUrl)
+        }
+    }
+
+    private fun String.resolveM3u8Url(path: String): String {
+        val trimmedPath = path.trim()
+        if (trimmedPath.startsWith("http://") || trimmedPath.startsWith("https://")) {
+            return trimmedPath
+        }
+        return try {
+            URI(this).resolve(trimmedPath).toString()
+        } catch (e: Throwable) {
+            e.printStackTrace()
+            trimmedPath
+        }
+    }
+
+    private fun Throwable.downloadErrorMessage(): String {
+        val messages = generateSequence(this as Throwable?) { it.cause }
+            .mapNotNull { it.message?.takeIf(String::isNotBlank) }
+            .distinct()
+            .toList()
+        return messages.joinToString(": ").ifBlank {
+            stringRes(com.heyanle.easy_i18n.R.string.download_error)
+        }
+    }
+
     private fun DownloadReceiver.getFirstTaskWithExt(
         ext: String
     ): DownloadEntity? {
@@ -361,5 +385,13 @@ class AriaAction(
             "str=?",
             ext
         )
+    }
+
+    private fun DownloadEntity.canReuse(): Boolean {
+        return state == DownloadEntity.STATE_WAIT ||
+                state == DownloadEntity.STATE_COMPLETE ||
+                state == DownloadEntity.STATE_POST_PRE ||
+                state == DownloadEntity.STATE_RUNNING ||
+                state == DownloadEntity.STATE_STOP
     }
 }

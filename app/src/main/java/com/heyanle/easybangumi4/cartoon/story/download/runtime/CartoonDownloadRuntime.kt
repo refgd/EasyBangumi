@@ -142,6 +142,42 @@ class CartoonDownloadRuntime(
         info.subStatus.value = subStatus
     }
 
+    private val busDispatchLock = Object()
+    private var lastBusDispatchTime = 0L
+    private var lastBusDispatchProcess = Float.NaN
+    private var lastBusDispatchStatus = ""
+    private var lastBusDispatchSubStatus = ""
+
+    fun dispatchToBusThrottled(
+        process: Float,
+        status: String,
+        subStatus: String = "",
+        minIntervalMs: Long = 500L,
+        force: Boolean = false,
+    ) {
+        synchronized(busDispatchLock) {
+            val now = System.currentTimeMillis()
+            val progressChanged = if (lastBusDispatchProcess.isNaN() || process.isNaN()) {
+                true
+            } else {
+                kotlin.math.abs(process - lastBusDispatchProcess) >= 0.01f
+            }
+            val shouldDispatch = force ||
+                    status != lastBusDispatchStatus ||
+                    process >= 1f ||
+                    progressChanged ||
+                    now - lastBusDispatchTime >= minIntervalMs
+            if (!shouldDispatch) {
+                return
+            }
+            lastBusDispatchTime = now
+            lastBusDispatchProcess = process
+            lastBusDispatchStatus = status
+            lastBusDispatchSubStatus = subStatus
+            dispatchToBus(process, status, subStatus)
+        }
+    }
+
     fun dispatchStateToBus() {
         val info = getDownloadInfo()
         when (state) {
