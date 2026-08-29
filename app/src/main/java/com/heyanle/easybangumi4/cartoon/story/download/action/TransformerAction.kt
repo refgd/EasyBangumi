@@ -16,6 +16,7 @@ import com.heyanle.easybangumi4.APP
 import com.heyanle.easybangumi4.cartoon.entity.CartoonDownloadReq
 import com.heyanle.easybangumi4.cartoon.story.download.CartoonDownloadPreference
 import com.heyanle.easybangumi4.cartoon.story.download.runtime.CartoonDownloadRuntime
+import com.heyanle.easybangumi4.cartoon.story.download.utils.DownloadFileValidator
 import com.heyanle.easybangumi4.exo.CartoonMediaSourceFactory
 import com.heyanle.easybangumi4.utils.CoroutineProvider
 import com.heyanle.easybangumi4.utils.getCachePath
@@ -52,7 +53,7 @@ class TransformerAction(
 
     private val dispatchScope = CoroutineScope(SupervisorJob() + CoroutineProvider.SINGLE)
     private val executor = ThreadPoolExecutor(
-        0, cartoonDownloadPreference.transformMaxCountPref.get().toInt(),
+        0, cartoonDownloadPreference.transformMaxCount,
         10L, TimeUnit.SECONDS,
         SynchronousQueue(),
     )
@@ -66,9 +67,7 @@ class TransformerAction(
                 tryDispatch()
                 return
             }
-            synchronized(runtime.lock) {
-                innerInvoke(runtime)
-            }
+            innerInvoke(runtime)
             tryDispatch()
         }
     }
@@ -124,8 +123,10 @@ class TransformerAction(
         try {
             val initLatch = CountDownLatch(1)
             val completelyLatch = CountDownLatch(1)
-            cartoonDownloadRuntime.transformerInitLatch = initLatch
-            cartoonDownloadRuntime.transformerCompletelyLatch = completelyLatch
+            synchronized(cartoonDownloadRuntime.lock) {
+                cartoonDownloadRuntime.transformerInitLatch = initLatch
+                cartoonDownloadRuntime.transformerCompletelyLatch = completelyLatch
+            }
 
             val playerInfo = cartoonDownloadRuntime.playerInfo ?: throw IllegalStateException("playerInfo is null")
             val mediaItem = mediaSourceFactory.getMediaItem(playerInfo)
@@ -167,7 +168,9 @@ class TransformerAction(
                     }
                 })
                 .build()
-            cartoonDownloadRuntime.transformer = transformer
+            synchronized(cartoonDownloadRuntime.lock) {
+                cartoonDownloadRuntime.transformer = transformer
+            }
 
 
             val realTarget = cartoonDownloadRuntime.req.transformTarget()
@@ -176,9 +179,13 @@ class TransformerAction(
             cacheFolder.mkdirs()
             doneTarget.delete()
             tempTarget.delete()
-            tempTarget.createNewFile()
+            if (!tempTarget.createNewFile() || !tempTarget.canWrite()) {
+                throw IllegalStateException("无法创建普通模式临时输出文件")
+            }
 
-            cartoonDownloadRuntime.transformerFile = tempTarget
+            synchronized(cartoonDownloadRuntime.lock) {
+                cartoonDownloadRuntime.transformerFile = tempTarget
+            }
 
             val holder: ProgressHolder = ProgressHolder()
             val inputFormat = playerInfo.decodeType.toInputFormatName()
@@ -199,7 +206,9 @@ class TransformerAction(
                 initLatch.countDown()
             }
 
-            initLatch.await()
+            if (!initLatch.await(30L, TimeUnit.SECONDS)) {
+                throw IllegalStateException("普通模式启动超时")
+            }
             while (completelyLatch.count > 0) {
                 if (cartoonDownloadRuntime.isCanceled()) {
                     mainScope.launch {
@@ -224,7 +233,7 @@ class TransformerAction(
                     if (outputBytes > lastProgressBytes) {
                         lastChangedTime = now
                     }
-                    cartoonDownloadRuntime.dispatchToBus(
+                    cartoonDownloadRuntime.dispatchToBusThrottled(
                         progress.toFloat() / 100f,
                         stringRes(com.heyanle.easy_i18n.R.string.downloading),
                         transformerDetail(
@@ -258,6 +267,16 @@ class TransformerAction(
                 if (!tempTarget.renameTo(realTarget)) {
                     tempTarget.copyTo(realTarget, overwrite = true)
                     tempTarget.delete()
+                }
+                val validateError = DownloadFileValidator.validateMedia(realTarget)
+                if (validateError != null) {
+                    realTarget.delete()
+                    doneTarget.delete()
+                    cartoonDownloadRuntime.error(
+                        IllegalStateException(validateError),
+                        "普通模式输出文件不可用：$validateError"
+                    )
+                    return
                 }
                 doneTarget.createNewFile()
                 cartoonDownloadRuntime.filePathBeforeCopy = realTarget.absolutePath
@@ -367,6 +386,11 @@ class TransformerAction(
         return String.format(Locale.US, "%.1f %s", value, units[unitIndex])
     }
 
+    override fun onTaskCompletely(cartoonDownloadRuntime: CartoonDownloadRuntime) {
+        cartoonDownloadRuntime.req.transformTempTarget().delete()
+        cartoonDownloadRuntime.req.transformDoneTarget().delete()
+    }
+
     override fun onCancel(cartoonDownloadRuntime: CartoonDownloadRuntime) {
         cartoonDownloadRuntime.transformRunnable?.let {
             executor.remove(it)
@@ -377,6 +401,8 @@ class TransformerAction(
         mainScope.launch {
             cartoonDownloadRuntime.transformer?.cancel()
             cartoonDownloadRuntime.transformerFile?.delete()
+            cartoonDownloadRuntime.req.transformTempTarget().delete()
+            cartoonDownloadRuntime.req.transformDoneTarget().delete()
         }
     }
 

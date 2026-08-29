@@ -49,6 +49,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.heyanle.easybangumi4.LocalNavController
 import com.heyanle.easybangumi4.R
 import com.heyanle.easybangumi4.cartoon.entity.CartoonDownloadInfo
+import com.heyanle.easybangumi4.cartoon.story.download.utils.DownloadProgressUtils
 import com.heyanle.easybangumi4.ui.common.EasyDeleteDialog
 import com.heyanle.easybangumi4.ui.common.FastScrollToTopFab
 import com.heyanle.easybangumi4.ui.common.LoadingPage
@@ -293,18 +294,31 @@ fun DownloadItem(
                     )
                 }else {
                     val info = downloadItem.runtime.getDownloadInfo()
-                    Text(
-                        info.status.value,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = if (isSelect) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onBackground
+                    val status = info.status.value
+                    val detail = info.subStatus.value
+                    val isError = downloadItem.runtime.isError()
+                    val showStatus = DownloadProgressUtils.shouldShowStatus(
+                        status = status,
+                        detail = detail,
+                        downloadingStatus = stringResource(com.heyanle.easy_i18n.R.string.downloading),
+                        isError = isError,
                     )
-                    Text(
-                        info.subStatus.value,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        color = if (isSelect) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onBackground
-                    )
+                    if (showStatus) {
+                        Text(
+                            status,
+                            maxLines = if (isError) 2 else 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = if (isSelect) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onBackground
+                        )
+                    }
+                    if (!isError && detail.isNotBlank()) {
+                        Text(
+                            detail,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            color = if (isSelect) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onBackground
+                        )
+                    }
 
                 }
             }
@@ -315,10 +329,12 @@ fun DownloadItem(
                 if (info.process.value == -1f) {
                     LinearProgressIndicator()
                 } else {
-                    LinearProgressIndicator(info.process.value)
+                    LinearProgressIndicator(
+                        progress = { info.process.value.coerceIn(0f, 1f) }
+                    )
                 }
             } else {
-                LinearProgressIndicator(0f)
+                LinearProgressIndicator(progress = { 0f })
             }
 
         }

@@ -4,16 +4,23 @@ import android.app.Application
 import com.heyanle.easybangumi4.cartoon.entity.CartoonDownloadReq
 import com.heyanle.easybangumi4.cartoon.story.download.runtime.CartoonDownloadRuntime
 import com.heyanle.easybangumi4.cartoon.story.download.utils.M3U8Utils
+import com.heyanle.easybangumi4.cartoon.story.download.utils.DownloadFileValidator
+import com.heyanle.easybangumi4.cartoon.story.download.utils.DownloadProgressUtils
 import com.heyanle.easybangumi4.utils.CoroutineProvider
 import com.heyanle.easybangumi4.utils.EasyMemoryInfo
 import com.heyanle.easybangumi4.utils.getCachePath
 import com.heyanle.easybangumi4.utils.stringRes
 import com.jeffmony.m3u8library.VideoProcessManager
 import com.jeffmony.m3u8library.listener.IVideoTransformListener
-import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Created by heyanle on 2024/8/4.
@@ -27,7 +34,7 @@ class TranscodeAction(
         const val NAME = "Transcode"
     }
 
-    private val scope = MainScope()
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     // 该阶段同时只能处理一个任务
     private val executor = CoroutineProvider.newSingleExecutor
     private val cacheFolder = application.getCachePath("transcode")
@@ -43,7 +50,13 @@ class TranscodeAction(
             if (runtime.isCanceled() || runtime.isError()) {
                 return
             }
-            innerRun(runtime)
+            try {
+                innerRun(runtime)
+            } finally {
+                if (runtime.isCanceled()) {
+                    cleanupCache(runtime.req.uuid, includeFinalOutput = true)
+                }
+            }
         }
     }
 
@@ -56,6 +69,9 @@ class TranscodeAction(
                 return
             }
             if (!decrypt(cartoonDownloadRuntime)) {
+                if (cartoonDownloadRuntime.isCanceled()) {
+                    return
+                }
                 synchronized(cartoonDownloadRuntime.lock) {
                     cartoonDownloadRuntime.error(
                         errorMsg = stringRes(com.heyanle.easy_i18n.R.string.decrypt_error),
@@ -67,34 +83,24 @@ class TranscodeAction(
             if (cartoonDownloadRuntime.isCanceled() || cartoonDownloadRuntime.isError()) {
                 return
             }
-            if (
-                !ffmpeg(
-                    cartoonDownloadRuntime,
-                    // 回调为异步，需要重新获取锁
-                    onCompletely = {
-                        synchronized(cartoonDownloadRuntime.lock) {
-                            cartoonDownloadRuntime.filePathBeforeCopy =
-                                cartoonDownloadRuntime.ffmpegFile?.absolutePath ?: ""
-                            cartoonDownloadRuntime.stepCompletely(this)
-                        }
-                    },
-                    onError = {
-                        synchronized(cartoonDownloadRuntime.lock) {
-                            cartoonDownloadRuntime.error(
-                                errorMsg = stringRes(com.heyanle.easy_i18n.R.string.transcode_error).withErrorMessage(it),
-                                error = it
-                            )
-                        }
-                    }
-                )
-            ) {
+            val transcodeError = ffmpeg(cartoonDownloadRuntime)
+            if (cartoonDownloadRuntime.isCanceled()) {
+                return
+            }
+            if (transcodeError != null) {
                 synchronized(cartoonDownloadRuntime.lock) {
                     cartoonDownloadRuntime.error(
-                        errorMsg = stringRes(com.heyanle.easy_i18n.R.string.decrypt_error),
-                        error = IOException("Decrypt failed")
+                        errorMsg = stringRes(com.heyanle.easy_i18n.R.string.transcode_error)
+                            .withErrorMessage(transcodeError),
+                        error = transcodeError
                     )
                 }
                 return
+            }
+            synchronized(cartoonDownloadRuntime.lock) {
+                cartoonDownloadRuntime.filePathBeforeCopy =
+                    cartoonDownloadRuntime.ffmpegFile?.absolutePath ?: ""
+                cartoonDownloadRuntime.stepCompletely(this)
             }
         }catch (e: Throwable){
             synchronized(cartoonDownloadRuntime.lock) {
@@ -108,9 +114,8 @@ class TranscodeAction(
     }
 
     override suspend fun canResume(cartoonDownloadReq: CartoonDownloadReq): Boolean {
-        // 文件最终是改名，只要存在就一定已完成
-        val realTarget = File(cacheFolder, "${cartoonDownloadReq.uuid}.mp4")
-        return realTarget.exists() && realTarget.isFile && realTarget.canRead() && realTarget.length() > 0
+        val realTarget = File(ffmpegCacheFolder, "${cartoonDownloadReq.uuid}.mp4")
+        return DownloadFileValidator.validateMedia(realTarget) == null
     }
 
     // 不支持暂停
@@ -119,12 +124,13 @@ class TranscodeAction(
     }
 
     override fun push(cartoonDownloadRuntime: CartoonDownloadRuntime) {
-        val realTarget = File(cacheFolder, "${cartoonDownloadRuntime.req.uuid}.mp4")
-        if ( realTarget.exists() && realTarget.isFile && realTarget.canRead() && realTarget.length() > 0) {
+        val realTarget = File(ffmpegCacheFolder, "${cartoonDownloadRuntime.req.uuid}.mp4")
+        if (DownloadFileValidator.validateMedia(realTarget) == null) {
             cartoonDownloadRuntime.filePathBeforeCopy = realTarget.absolutePath
             cartoonDownloadRuntime.stepCompletely(this)
             return
         }
+        cleanupTemporaryFiles(cartoonDownloadRuntime.req.uuid)
 
 
         // 非 m3u8 任务不需要转码
@@ -144,18 +150,9 @@ class TranscodeAction(
     }
 
     override fun onCancel(cartoonDownloadRuntime: CartoonDownloadRuntime) {
-        executor.remove(cartoonDownloadRuntime.transcodeRunnable)
-        try {
-            M3U8Utils.deleteM3U8WithTs(
-                cartoonDownloadRuntime.decryptFile?.absolutePath ?: ""
-            )
-            M3U8Utils.deleteM3U8WithTs(
-                cartoonDownloadRuntime.decryptCacheFile?.absolutePath ?: ""
-            )
-            cartoonDownloadRuntime.ffmpegCacheFile?.delete()
-            cartoonDownloadRuntime.decryptCacheFile?.delete()
-        } catch (e: Throwable) {
-            e.printStackTrace()
+        val removedFromQueue = executor.remove(cartoonDownloadRuntime.transcodeRunnable)
+        if (removedFromQueue) {
+            cleanupCache(cartoonDownloadRuntime.req.uuid, includeFinalOutput = true)
         }
 
     }
@@ -173,6 +170,13 @@ class TranscodeAction(
         val target = File(decryptCacheFolder, "${cartoonDownloadRuntime.req.uuid}.m3u8.temp")
         val realTarget = File(decryptCacheFolder, "${cartoonDownloadRuntime.req.uuid}.m3u8")
         decryptCacheFolder.mkdirs()
+        if (DownloadFileValidator.validateLocalM3u8(realTarget) == null) {
+            synchronized(cartoonDownloadRuntime.lock) {
+                cartoonDownloadRuntime.decryptFile = realTarget
+            }
+            return true
+        }
+        M3U8Utils.deleteM3U8WithTs(realTarget.absolutePath)
         target.delete()
         if (!target.createNewFile() || !target.canWrite()) {
             return false
@@ -181,6 +185,14 @@ class TranscodeAction(
         // 这里改名是原子操作，只要文件存在就一定成功
         synchronized(cartoonDownloadRuntime.lock) {
             cartoonDownloadRuntime.decryptFile = realTarget
+        }
+        val encryptionMethod = entity.method.orEmpty()
+        val needDecrypt = encryptionMethod.equals("AES-128", ignoreCase = true)
+        if (encryptionMethod.isNotBlank() &&
+            !encryptionMethod.equals("NONE", ignoreCase = true) &&
+            !needDecrypt
+        ) {
+            return copyInputPlaylist(localM3U8, realTarget)
         }
         scope.launch {
             cartoonDownloadRuntime.dispatchToBusThrottled(
@@ -195,19 +207,22 @@ class TranscodeAction(
         val it = localM3U8.readLines().iterator()
         val tsFiles = arrayListOf<File>()
         val targetTsFiles = arrayListOf<File>()
+        var mediaSequence = 0L
         val memoryInfo = EasyMemoryInfo(application)
         memoryInfo.update()
         // 内存不足直接跳过
         if (memoryInfo.lowMemory) {
-            realTarget.delete()
-            localM3U8.renameTo(realTarget)
-            return true
+            return copyInputPlaylist(localM3U8, realTarget)
         }
         try {
             target.writer(Charsets.UTF_8).buffered().use { writer ->
                 while (it.hasNext()) {
                     val line = it.next()
-                    if (line.startsWith("#EXTINF")) {
+                    if (line.startsWith("#EXT-X-MEDIA-SEQUENCE:", ignoreCase = true)) {
+                        mediaSequence = line.substringAfter(':').trim().toLongOrNull() ?: 0L
+                        writer.write(line)
+                        writer.newLine()
+                    } else if (line.startsWith("#EXTINF")) {
                         if (!it.hasNext()) {
                             return false
                         } else {
@@ -220,9 +235,7 @@ class TranscodeAction(
                                 || (Runtime.getRuntime()?.freeMemory()
                                     ?: Long.MAX_VALUE) * 0.8 <= file.length()
                             ) {
-                                realTarget.delete()
-                                localM3U8.renameTo(realTarget)
-                                return true
+                                return copyInputPlaylist(localM3U8, realTarget)
                             }
                             tsFiles.add(file)
                             // ts -> tsh
@@ -243,10 +256,7 @@ class TranscodeAction(
             }
         } catch (e: OutOfMemoryError) {
             e.printStackTrace()
-            // oom 了 也放弃解密
-            realTarget.delete()
-            localM3U8.renameTo(realTarget)
-            return true
+            return copyInputPlaylist(localM3U8, realTarget)
         } catch (e: IOException) {
             e.printStackTrace()
             // 解密失败
@@ -254,7 +264,6 @@ class TranscodeAction(
         }
 
         // 开始解密咯！
-        val needDecrypt = entity.method?.contains("AES", ignoreCase = true) == true
         val keyB = if (needDecrypt) {
             val keyPath = entity.keyPath
             if (keyPath.isNullOrEmpty()) {
@@ -278,6 +287,9 @@ class TranscodeAction(
             )
         }
         for (i in 0 until tsFiles.size.coerceAtMost(targetTsFiles.size)) {
+            if (cartoonDownloadRuntime.isCanceled()) {
+                return false
+            }
             scope.launch {
                 cartoonDownloadRuntime.dispatchToBusThrottled(
                     if (tsFiles.size == 0) 0f else {
@@ -304,15 +316,17 @@ class TranscodeAction(
                 return false
             }
             val s = ts.readBytes()
+            val segmentIv = entity.iv.takeIf { it.isNotBlank() }
+                ?: "0x${(mediaSequence + i).toString(16).padStart(32, '0')}"
             val res = if (needDecrypt) M3U8Utils.decrypt(
                 s,
                 s.size,
                 keyB,
-                entity.iv,
+                segmentIv,
                 entity.method
             ) else s
             // 文件头伪装成 png
-            val rr = res ?: s
+            val rr = res ?: return false
             if (rr.size >= 4) {
                 if (rr[0].toInt() == 0x89 && rr[1].toInt() == 0x50 && rr[2].toInt() == 0x4E && rr[3].toInt() == 0x47) {
                     rr[0] = 0xff.toByte()
@@ -322,21 +336,34 @@ class TranscodeAction(
                 }
             }
             tshTemp.writeBytes(rr)
-            tshTemp.renameTo(tsh)
+            if (!tshTemp.renameTo(tsh)) {
+                tshTemp.copyTo(tsh, overwrite = true)
+                tshTemp.delete()
+            }
+            if (!tsh.isFile || !tsh.canRead() || tsh.length() <= 0L) {
+                return false
+            }
             ts.delete()
         }
-        target.renameTo(realTarget)
-        return true
+        if (!target.renameTo(realTarget)) {
+            target.copyTo(realTarget, overwrite = true)
+            target.delete()
+        }
+        return DownloadFileValidator.validateLocalM3u8(realTarget) == null
     }
 
-    private fun ffmpeg(
-        cartoonDownloadRuntime: CartoonDownloadRuntime,
-        onError: (Exception?) -> Unit,
-        onCompletely: () -> Unit
-    ): Boolean {
+    private fun copyInputPlaylist(source: File, target: File): Boolean {
+        return runCatching {
+            target.delete()
+            source.copyTo(target, overwrite = true)
+            DownloadFileValidator.validateLocalM3u8(target) == null
+        }.getOrDefault(false)
+    }
+
+    private fun ffmpeg(cartoonDownloadRuntime: CartoonDownloadRuntime): Exception? {
         val m3u8 = cartoonDownloadRuntime.decryptFile
         if (m3u8 == null || !m3u8.exists() || !m3u8.canRead()) {
-            return false
+            return IOException("Transcode input is missing or unreadable")
         }
         val realTarget = File(ffmpegCacheFolder, "${cartoonDownloadRuntime.req.uuid}.mp4")
         ffmpegCacheFolder.mkdirs()
@@ -344,46 +371,114 @@ class TranscodeAction(
             cartoonDownloadRuntime.ffmpegFile = realTarget
         }
         val target = File(ffmpegCacheFolder, realTarget.name + ".temp.mp4")
-        scope.launch {
-            cartoonDownloadRuntime.dispatchToBusThrottled(
-                0f,
-                stringRes(com.heyanle.easy_i18n.R.string.transcoding),
-                force = true,
-            )
-        }
+        target.delete()
+        realTarget.delete()
+        cartoonDownloadRuntime.dispatchToBusThrottled(
+            0f,
+            stringRes(com.heyanle.easy_i18n.R.string.transcoding),
+            "0%",
+            force = true,
+        )
 
-        VideoProcessManager.getInstance().transformM3U8ToMp4(
-            m3u8.absolutePath,
-            target.absolutePath,
-            object : IVideoTransformListener {
+        val completelyLatch = CountDownLatch(1)
+        val transformError = AtomicReference<Exception?>(null)
+        cartoonDownloadRuntime.transcodeNativeRunning = true
+        try {
+            VideoProcessManager.getInstance().transformM3U8ToMp4(
+                m3u8.absolutePath,
+                target.absolutePath,
+                object : IVideoTransformListener {
                 override fun onTransformProgress(progress: Float) {
-                    scope.launch {
-                        cartoonDownloadRuntime.dispatchToBusThrottled(
-                            progress,
-                            stringRes(com.heyanle.easy_i18n.R.string.transcoding),
-                            "${(progress).toInt()}%"
-                        )
-                    }
+                    val percent = progress.coerceIn(0f, 100f)
+                    cartoonDownloadRuntime.dispatchToBusThrottled(
+                        DownloadProgressUtils.nativePercentToFraction(percent),
+                        stringRes(com.heyanle.easy_i18n.R.string.transcoding),
+                        "${percent.toInt()}%"
+                    )
                 }
 
                 override fun onTransformFailed(e: Exception?) {
-                    onError(e)
-
+                    transformError.set(e ?: IOException("Native transcode failed"))
+                    cartoonDownloadRuntime.transcodeNativeRunning = false
+                    completelyLatch.countDown()
                 }
 
                 override fun onTransformFinished() {
-                    target.renameTo(realTarget)
-                    M3U8Utils.deleteM3U8WithTs(m3u8.absolutePath)
-                    onCompletely()
+                    scope.launch {
+                        try {
+                            if (cartoonDownloadRuntime.isCanceled()) {
+                                return@launch
+                            }
+                            if (!target.renameTo(realTarget)) {
+                                target.copyTo(realTarget, overwrite = true)
+                                target.delete()
+                            }
+                            DownloadFileValidator.validateMedia(realTarget)?.let {
+                                realTarget.delete()
+                                throw IllegalStateException(it)
+                            }
+                            M3U8Utils.deleteM3U8WithTs(m3u8.absolutePath)
+                        } catch (e: Throwable) {
+                            transformError.set(e.asException())
+                        } finally {
+                            cartoonDownloadRuntime.transcodeNativeRunning = false
+                            completelyLatch.countDown()
+                        }
+                    }
                 }
+                }
+            )
+        } catch (e: Throwable) {
+            transformError.set(e.asException())
+            cartoonDownloadRuntime.transcodeNativeRunning = false
+            completelyLatch.countDown()
+        }
+        while (!completelyLatch.await(1L, TimeUnit.SECONDS)) {
+            if (cartoonDownloadRuntime.isCanceled()) {
+                cartoonDownloadRuntime.dispatchToBusThrottled(
+                    -1f,
+                    stringRes(com.heyanle.easy_i18n.R.string.transcoding),
+                    "正在等待原生转码退出",
+                )
             }
-        )
-        return true
+        }
+        if (cartoonDownloadRuntime.isCanceled()) {
+            target.delete()
+            realTarget.delete()
+            return null
+        }
+        return transformError.get()
     }
 
     private fun String.withErrorMessage(error: Throwable?): String {
         val message = error?.message?.takeIf { it.isNotBlank() } ?: return this
         return "$this: $message"
+    }
+
+    private fun Throwable.asException(): Exception {
+        return this as? Exception ?: RuntimeException(this)
+    }
+
+    override fun onTaskCompletely(cartoonDownloadRuntime: CartoonDownloadRuntime) {
+        cleanupCache(cartoonDownloadRuntime.req.uuid)
+    }
+
+    private fun cleanupTemporaryFiles(uuid: String) {
+        File(decryptCacheFolder, "$uuid.m3u8.temp").delete()
+        File(ffmpegCacheFolder, "$uuid.mp4.temp.mp4").delete()
+    }
+
+    private fun cleanupCache(uuid: String, includeFinalOutput: Boolean = false) {
+        runCatching {
+            M3U8Utils.deleteM3U8WithTs(File(decryptCacheFolder, "$uuid.m3u8").absolutePath)
+            M3U8Utils.deleteM3U8WithTs(File(decryptCacheFolder, "$uuid.m3u8.temp").absolutePath)
+            File(ffmpegCacheFolder, "$uuid.mp4.temp.mp4").delete()
+            if (includeFinalOutput) {
+                File(ffmpegCacheFolder, "$uuid.mp4").delete()
+            }
+        }.onFailure {
+            it.printStackTrace()
+        }
     }
 
 }

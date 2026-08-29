@@ -1,5 +1,7 @@
 package com.heyanle.easybangumi4.cartoon.story.download.runtime
 
+import android.os.Handler
+import android.os.Looper
 import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
 import androidx.media3.transformer.Transformer
@@ -15,6 +17,7 @@ import com.heyanle.inject.core.Inject
 import kotlinx.coroutines.Job
 import java.io.File
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Created by heyanle on 2024/8/2.
@@ -96,6 +99,9 @@ class CartoonDownloadRuntime(
     // transcode action
     var transcodeRunnable: Runnable? = null
 
+    @Volatile
+    var transcodeNativeRunning: Boolean = false
+
 
     // 解密阶段产物路径
     var decryptCacheFile: File? = null
@@ -130,23 +136,22 @@ class CartoonDownloadRuntime(
 
     // 状态分发
 
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val busDispatchVersion = AtomicLong(0L)
+
     fun getDownloadInfo(): DownloadingBus.DownloadingInfo {
         val bus: DownloadingBus = Inject.get()
         return bus.getInfo(DownloadingBus.DownloadScene.CARTOON, req.uuid)
     }
 
     fun dispatchToBus(process: Float, status: String, subStatus: String = ""){
-        val info = getDownloadInfo()
-        info.process.value = process
-        info.status.value = status
-        info.subStatus.value = subStatus
+        dispatchBusUpdate(process, status, subStatus)
     }
 
     private val busDispatchLock = Object()
     private var lastBusDispatchTime = 0L
     private var lastBusDispatchProcess = Float.NaN
     private var lastBusDispatchStatus = ""
-    private var lastBusDispatchSubStatus = ""
 
     fun dispatchToBusThrottled(
         process: Float,
@@ -173,24 +178,37 @@ class CartoonDownloadRuntime(
             lastBusDispatchTime = now
             lastBusDispatchProcess = process
             lastBusDispatchStatus = status
-            lastBusDispatchSubStatus = subStatus
             dispatchToBus(process, status, subStatus)
         }
     }
 
     fun dispatchStateToBus() {
-        val info = getDownloadInfo()
         when (state) {
             State.WAITING, State.STEP_COMPLETELY -> {
-                info.process.value = -1f
-                info.status.value = stringRes(R.string.waiting)
-                info.subStatus.value = ""
+                dispatchBusUpdate(-1f, stringRes(R.string.waiting), "")
             }
             State.ERROR -> {
-                info.process.value = 0f
-                info.status.value = errorMsg
+                dispatchBusUpdate(0f, errorMsg, "")
             }
             else -> { }
+        }
+    }
+
+    private fun dispatchBusUpdate(process: Float, status: String, subStatus: String) {
+        val version = busDispatchVersion.incrementAndGet()
+        val update = Runnable {
+            if (busDispatchVersion.get() != version) {
+                return@Runnable
+            }
+            val info = getDownloadInfo()
+            info.process.value = process
+            info.status.value = status
+            info.subStatus.value = subStatus
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            update.run()
+        } else {
+            mainHandler.post(update)
         }
     }
     fun error(error: Throwable? = null, errorMsg: String? = null){

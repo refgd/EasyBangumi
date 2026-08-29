@@ -103,9 +103,16 @@ class CartoonDownloadDispatcher(
                                 action.push(runtime)
                             } else {
                                 val syncRunnable = Runnable {
-                                    synchronized(runtime.lock) {
+                                    try {
                                         action.push(runtime)
-                                        runtime.lock.notify()
+                                    } catch (e: Throwable) {
+                                        if (!runtime.isCanceled()) {
+                                            runtime.error(e, e.message)
+                                        }
+                                    } finally {
+                                        synchronized(runtime.lock) {
+                                            runtime.lock.notify()
+                                        }
                                     }
                                 }
                                 runtime.syncTaskRunnable = syncRunnable
