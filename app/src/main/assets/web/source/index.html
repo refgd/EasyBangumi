@@ -1,45 +1,74 @@
-<!DOCTYPE HTML>
-<html>
-
+<!DOCTYPE html>
+<html lang="zh-CN">
 <head>
-    <title>纯纯看看</title>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>纯纯看看插件调试</title>
     <link rel="stylesheet" href="../assets/css/source.css" />
     <link rel="stylesheet" href="../assets/css/codemirror.min.css" />
 </head>
-
 <body>
-
-    <!-- Wrapper -->
     <div id="wrapper">
-        <!-- Header -->
         <header id="header">
-            <div class="logo">
-                <img src="../assets/imgs/logo.png">
+            <div class="brand">
+                <img src="../assets/imgs/logo.png" alt="" />
+                <strong>插件调试</strong>
+            </div>
+            <div class="connection">
+                <span id="status-dot"></span>
+                <span id="status-text">未连接</span>
             </div>
             <div class="actions">
-                
+                <button type="button" class="primary" data-act="test">开始调试</button>
+                <button type="button" data-act="download">下载插件</button>
             </div>
         </header>
-        <div class="panel">
-            <div class="left">
-                <textarea></textarea>
-            </div>
-            <div class="mid">
-                <button data-act="test">=> 调试源</button>
-                <button data-act="download">↓ 下载插件</button>
-            </div>
-            <div class="right">
-                <textarea readonly></textarea>
-            </div>
-        </div>
+
+        <main class="workspace">
+            <section class="pane editor-pane">
+                <div class="pane-title">插件代码</div>
+                <div class="editor-wrap"><textarea id="source-editor"></textarea></div>
+            </section>
+
+            <section class="pane debug-pane">
+                <div class="pane-title">交互调试</div>
+                <div id="context" class="context"></div>
+                <nav id="steps" class="steps"></nav>
+                <div class="selection-head">
+                    <div>
+                        <h2 id="selection-title">等待开始</h2>
+                        <span id="selection-count"></span>
+                    </div>
+                    <span id="busy-indicator" class="busy-indicator">处理中</span>
+                </div>
+                <div id="options" class="options empty">点击“开始调试”加载主分类</div>
+                <div id="pager" class="pager">
+                    <button type="button" id="page-back">上一页</button>
+                    <label>页参数 <input id="page-key" type="number" value="0" /></label>
+                    <button type="button" id="page-go">跳转</button>
+                    <button type="button" id="page-next">下一页</button>
+                </div>
+            </section>
+
+            <section class="pane output-pane">
+                <div class="result-section">
+                    <div class="pane-title">结果</div>
+                    <div id="result" class="result empty">尚无详情或播放结果</div>
+                </div>
+                <div class="log-section">
+                    <div class="pane-title log-title">
+                        <span>日志</span>
+                        <button type="button" id="clear-log">清空</button>
+                    </div>
+                    <pre id="log"></pre>
+                </div>
+            </section>
+        </main>
     </div>
-    
+
     <script src="../assets/js/base64.js"></script>
     <script src="../assets/js/jquery.min.js"></script>
     <script src="../assets/js/codemirror.min.js"></script>
     <script src="../assets/js/source.js"></script>
 </body>
-
 </html>

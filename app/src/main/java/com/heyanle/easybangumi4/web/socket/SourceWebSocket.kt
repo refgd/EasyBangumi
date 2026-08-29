@@ -1,5 +1,6 @@
 package com.heyanle.easybangumi4.web.socket
 
+import com.google.gson.Gson
 import com.heyanle.easybangumi4.plugin.extension.ExtensionInfo
 import com.heyanle.easybangumi4.plugin.js.extension.JSExtensionInnerLoader
 import com.heyanle.easybangumi4.plugin.js.runtime.JSRuntimeProvider
@@ -8,13 +9,13 @@ import com.heyanle.easybangumi4.utils.isJson
 import com.heyanle.easybangumi4.utils.jsonTo
 import com.heyanle.easybangumi4.utils.logi
 import com.heyanle.easybangumi4.utils.printOnDebug
-import com.heyanle.easybangumi4.utils.runOnIO
 import fi.iki.elonen.NanoHTTPD
 import fi.iki.elonen.NanoWSD
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.IOException
@@ -27,7 +28,15 @@ class SourceWebSocket(
     CoroutineScope by MainScope(),
     Debug.Callback {
 
+     private val gson = Gson()
+     private val outgoing = Channel<String>(Channel.UNLIMITED)
+
      override fun onOpen() {
+         launch(IO) {
+             for (payload in outgoing) {
+                 runCatching { send(payload) }.onFailure { it.printOnDebug() }
+             }
+         }
          launch(IO) {
              kotlin.runCatching {
                  while (isOpen) {
@@ -43,8 +52,11 @@ class SourceWebSocket(
          reason: String?,
          initiatedByRemote: Boolean
      ) {
+         outgoing.close()
          cancel()
-         Debug.cancelDebug(true)
+         if (Debug.callback === this) {
+             Debug.cancelDebug(true)
+         }
      }
 
      override fun onMessage(message: NanoWSD.WebSocketFrame) {
@@ -61,26 +73,57 @@ class SourceWebSocket(
                      val tag = debugBean["tag"]
                      val key = debugBean["key"]
                      if(tag == "debug" && key != null){
-                         JSExtensionInnerLoader(key, jsRuntime).load()?.let {
-                             when(it) {
+                         Debug.cancelDebug(true)
+                         when(val extension = JSExtensionInnerLoader(key, jsRuntime).load()) {
                                  is ExtensionInfo.InstallError -> {
-                                     send(it.errMsg)
+                                     send(gson.toJson(Debug.Event(type = "error", title = "插件加载失败", message = extension.errMsg)))
                                      close(NanoWSD.WebSocketFrame.CloseCode.NormalClosure, "调试结束", false)
                                      return@launch
                                  }
                                  is ExtensionInfo.Installed -> {
                                      Debug.callback = this@SourceWebSocket
-                                     Debug.startDebug(this, it)
+                                     Debug.startDebug(this, extension)
                                  }
-                                 else -> null
-                             }
                          }
+                     } else if (tag == "select") {
+                         if (Debug.callback !== this@SourceWebSocket) {
+                             emit(Debug.Event(type = "error", title = "会话已失效", message = "请重新点击开始调试"))
+                             return@launch
+                         }
+                         val stage = debugBean["stage"]
+                         val index = debugBean["index"]?.toIntOrNull()
+                         if (stage == null || index == null) {
+                             emit(Debug.Event(type = "error", title = "命令错误", message = "选择命令缺少步骤或序号"))
+                         } else {
+                             Debug.select(this, stage, index)
+                         }
+                     } else if (tag == "page") {
+                         if (Debug.callback !== this@SourceWebSocket) {
+                             emit(Debug.Event(type = "error", title = "会话已失效", message = "请重新点击开始调试"))
+                             return@launch
+                         }
+                         val pageKey = debugBean["key"]?.toIntOrNull()
+                         if (pageKey == null) {
+                             emit(Debug.Event(type = "error", title = "命令错误", message = "分页参数无效"))
+                         } else {
+                             Debug.loadPage(this, pageKey)
+                         }
+                     } else {
+                         emit(Debug.Event(type = "error", title = "命令错误", message = "未知命令: ${tag.orEmpty()}"))
                      }
                  } else {
                      send("数据必须为Json格式")
                      close(NanoWSD.WebSocketFrame.CloseCode.NormalClosure, "调试结束", false)
                      return@launch
                  }
+             }.onFailure {
+                 emit(
+                     Debug.Event(
+                         type = "error",
+                         title = "调试命令执行失败",
+                         message = it.stackTraceToString()
+                     )
+                 )
              }
          }
      }
@@ -90,21 +133,19 @@ class SourceWebSocket(
      }
 
      override fun onException(exception: IOException?) {
-         Debug.cancelDebug(true)
+         if (Debug.callback === this) {
+             Debug.cancelDebug(true)
+         }
      }
 
     override fun printLog(state: Int, msg: String) {
-        runOnIO {
-            runCatching {
-                send(msg)
-                if (state == -1 || state == 1000) {
-                    Debug.cancelDebug(true)
-                    close(NanoWSD.WebSocketFrame.CloseCode.NormalClosure, "调试结束", false)
-                }
-            }.onFailure {
-                it.printOnDebug()
-            }
-        }
+        outgoing.trySend(
+            gson.toJson(Debug.Event(type = "log", message = msg, fields = mapOf("state" to state.toString())))
+        )
+    }
+
+    override fun emit(event: Debug.Event) {
+        outgoing.trySend(gson.toJson(event))
     }
 
 }
