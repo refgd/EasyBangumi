@@ -169,7 +169,7 @@ class AriaAction(
                     val taskId = aria.load(playerInfo.uri)
                         .setExtendField(cartoonDownloadRuntime.req.uuid)
                         .option(HttpOption().apply {
-                            playerInfo.header?.iterator()?.forEach {
+                            playerInfo.normalizedHeaders().forEach {
                                 addHeader(it.key, it.value)
                             }
                         })
@@ -189,12 +189,12 @@ class AriaAction(
                     val taskId = aria.load(playerInfo.uri)
                         .setExtendField(cartoonDownloadRuntime.req.uuid)
                         .option(HttpOption().apply {
-                            playerInfo.header?.iterator()?.forEach {
+                            playerInfo.normalizedHeaders().forEach {
                                 addHeader(it.key, it.value)
                             }
                         })
                         .setFilePath(path)
-                        .m3u8VodOption(playerInfo.uri.buildM3u8Option())
+                        .m3u8VodOption(playerInfo.uri.buildM3u8Option(path))
                         .ignoreFilePathOccupy()
                         .ignoreCheckPermissions()
                         .create()
@@ -436,12 +436,19 @@ class AriaAction(
         return String.format(Locale.US, "%.1f %s", value, units[unitIndex])
     }
 
-    private fun String.buildM3u8Option(): M3U8VodOption {
+    private fun String.buildM3u8Option(downloadPath: String): M3U8VodOption {
         return M3U8VodOption().apply {
             setMaxTsQueueNum(maxM3u8PeerCount)
             setVodTsUrlConvert { m3u8Url, tsUrls ->
                 val baseUrl = resolveM3u8Base(m3u8Url)
-                tsUrls.map { baseUrl.resolveM3u8Url(it) }
+                tsUrls.map { baseUrl.resolveM3u8Url(it) }.also { resolvedUrls ->
+                    runCatching {
+                        File("$downloadPath.hls-urls").writeText(
+                            resolvedUrls.joinToString("\n"),
+                            Charsets.UTF_8,
+                        )
+                    }
+                }
             }
             setBandWidthUrlConverter { m3u8Url, bandWidthUrl ->
                 resolveM3u8Base(m3u8Url).resolveM3u8Url(bandWidthUrl)
@@ -523,6 +530,7 @@ class AriaAction(
     private fun cleanupDownloadCache(uuid: String) {
         runCatching {
             File(downloadFolder, "$uuid.mp4").delete()
+            File(downloadFolder, "$uuid.hls-urls").delete()
             File(downloadFolder, uuid).deleteRecursively()
         }.onFailure {
             it.printStackTrace()

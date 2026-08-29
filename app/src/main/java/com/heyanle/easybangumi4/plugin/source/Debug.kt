@@ -5,6 +5,7 @@ import com.heyanle.easybangumi4.BuildConfig
 import com.heyanle.easybangumi4.plugin.api.component.detailed.DetailedComponent
 import com.heyanle.easybangumi4.plugin.api.component.page.PageComponent
 import com.heyanle.easybangumi4.plugin.api.component.play.PlayComponent
+import com.heyanle.easybangumi4.plugin.api.component.search.SearchComponent
 import com.heyanle.easybangumi4.plugin.api.entity.CartoonCover
 import com.heyanle.easybangumi4.plugin.api.entity.CartoonSummary
 import com.heyanle.easybangumi4.plugin.api.entity.Episode
@@ -41,6 +42,7 @@ object Debug {
     private var selectedCover: CartoonCover? = null
     private var selectedPlayLine: PlayLine? = null
     private var currentPageKey = 0
+    private var currentSearchKeyword: String? = null
 
     @SuppressLint("ConstantLocale")
     private val debugTimeFormat = SimpleDateFormat("[mm:ss.SSS]", Locale.getDefault())
@@ -75,6 +77,24 @@ object Debug {
     }
 
     @Synchronized
+    fun capture(sourceUrl: String?, label: String?, content: String?) {
+        if (debugSource != sourceUrl || callback == null) return
+        val original = content.orEmpty()
+        val truncated = original.length > MAX_CAPTURE_LENGTH
+        callback?.emit(
+            Event(
+                type = TYPE_CAPTURE,
+                title = label?.takeIf { it.isNotBlank() } ?: "调试原文",
+                message = if (truncated) original.take(MAX_CAPTURE_LENGTH) else original,
+                fields = linkedMapOf(
+                    "length" to original.length.toString(),
+                    "truncated" to truncated.toString(),
+                )
+            )
+        )
+    }
+
+    @Synchronized
     fun cancelDebug(destroy: Boolean = false) {
         requestVersion++
         tasks.clear()
@@ -103,23 +123,51 @@ object Debug {
         getMainTabs(scope)
     }
 
-    fun select(scope: CoroutineScope, stage: String, index: Int) {
+    fun select(
+        scope: CoroutineScope,
+        stage: String,
+        index: Int? = null,
+        id: String? = null,
+        label: String? = null,
+    ) {
+        val resolvedIndex = resolveSelectionIndex(stage, index, id, label)
+            ?: return fail("无法匹配调试选项: stage=$stage, index=$index, id=${id.orEmpty()}, label=${label.orEmpty()}", "selection_not_found")
         when (stage) {
-            STAGE_MAIN -> selectMainTab(scope, index)
-            STAGE_SUB -> selectSubTab(scope, index)
-            STAGE_CONTENT -> selectContent(scope, index)
-            STAGE_PLAY_LINE -> selectPlayLine(index)
-            STAGE_EPISODE -> selectEpisode(scope, index)
-            else -> fail("未知调试步骤: $stage")
+            STAGE_MAIN -> selectMainTab(scope, resolvedIndex)
+            STAGE_SUB -> selectSubTab(scope, resolvedIndex)
+            STAGE_CONTENT, STAGE_SEARCH -> selectContent(scope, resolvedIndex)
+            STAGE_PLAY_LINE -> selectPlayLine(resolvedIndex)
+            STAGE_EPISODE -> selectEpisode(scope, resolvedIndex)
+            else -> fail("未知调试步骤: $stage", "unknown_stage")
         }
     }
 
     fun loadPage(scope: CoroutineScope, key: Int) {
-        if (selectedMainTab == null) {
+        val keyword = currentSearchKeyword
+        if (keyword != null) {
+            search(scope, keyword, key)
+        } else if (selectedMainTab == null) {
             fail("请先选择分类")
+        } else {
+            getContent(scope, key)
+        }
+    }
+
+    fun search(scope: CoroutineScope, keyword: String, key: Int = 0) {
+        if (keyword.isBlank()) {
+            fail("搜索关键词不能为空", "invalid_search_keyword")
             return
         }
-        getContent(scope, key)
+        currentSearchKeyword = keyword
+        selectedMainTab = null
+        selectedSubTab = null
+        selectedCover = null
+        selectedPlayLine = null
+        contents = emptyList()
+        playLines = emptyList()
+        currentPageKey = key
+        callback?.emit(contextEvent())
+        getSearchContent(scope, keyword, key)
     }
 
     private fun clearSelection() {
@@ -132,6 +180,7 @@ object Debug {
         selectedCover = null
         selectedPlayLine = null
         currentPageKey = 0
+        currentSearchKeyword = null
     }
 
     private fun nextRequest(title: String): Long {
@@ -162,7 +211,7 @@ object Debug {
                     stage = STAGE_MAIN,
                     title = "选择主分类",
                     options = mainTabs.mapIndexed { index, tab ->
-                        Option(index, tab.label, mainTabType(tab.type))
+                        Option(index, tab.label, mainTabType(tab.type), id = tab.ext?.toString()?.ifBlank { tab.label } ?: tab.label)
                     }
                 )
             )
@@ -182,6 +231,7 @@ object Debug {
         contents = emptyList()
         playLines = emptyList()
         currentPageKey = 0
+        currentSearchKeyword = null
         callback?.emit(contextEvent())
 
         if (mainTab.type == MainTab.MAIN_TAB_GROUP) {
@@ -211,7 +261,7 @@ object Debug {
                     stage = STAGE_SUB,
                     title = "选择次分类",
                     options = subTabs.mapIndexed { index, tab ->
-                        Option(index, tab.label, if (tab.isCover) "封面列表" else "文字列表")
+                            Option(index, tab.label, if (tab.isCover) "封面列表" else "文字列表", id = tab.ext?.ifBlank { tab.label } ?: tab.label)
                     }
                 )
             )
@@ -228,6 +278,7 @@ object Debug {
         contents = emptyList()
         playLines = emptyList()
         currentPageKey = 0
+        currentSearchKeyword = null
         callback?.emit(contextEvent())
         getContent(scope, 0)
     }
@@ -263,7 +314,7 @@ object Debug {
                         stage = STAGE_CONTENT,
                         title = "选择数据",
                         options = contents.mapIndexed { index, cover ->
-                            Option(index, cover.title, cover.intro.orEmpty(), cover.coverUrl)
+                            Option(index, cover.title, cover.intro.orEmpty(), cover.coverUrl, cover.id)
                         },
                         pageKey = key,
                         nextPageKey = result.data.first
@@ -274,6 +325,48 @@ object Debug {
             }
         }.onError {
             if (isCurrent(version)) fail(it.stackTraceStr)
+        }
+        tasks.add(task)
+    }
+
+    private fun getSearchContent(scope: CoroutineScope, keyword: String, key: Int) {
+        log(debugSource, "搜索[$keyword]，页参数=$key")
+        val version = nextRequest("正在搜索")
+        val bundle = debugBundle ?: return fail("调试器尚未加载插件")
+        val task = Coroutine.async(scope, Dispatchers.IO) {
+            bundle.getComponentProxy<SearchComponent>()?.search(key, keyword)
+        }.onSuccess { results ->
+            if (!isCurrent(version)) return@onSuccess
+            if (results == null) {
+                fail("搜索接口不可用", "search_unavailable")
+                return@onSuccess
+            }
+            results.complete { result ->
+                if (!isCurrent(version)) return@complete
+                currentPageKey = key
+                contents = result.data.second
+                selectedCover = null
+                selectedPlayLine = null
+                playLines = emptyList()
+                log(debugSource, "搜索完成，共 ${contents.size} 条，下一页=${result.data.first}")
+                callback?.emit(contextEvent())
+                callback?.emit(
+                    Event(
+                        type = TYPE_SELECTION,
+                        stage = STAGE_SEARCH,
+                        title = "搜索结果：$keyword",
+                        options = contents.mapIndexed { index, cover ->
+                            Option(index, cover.title, cover.intro.orEmpty(), cover.coverUrl, cover.id)
+                        },
+                        pageKey = key,
+                        nextPageKey = result.data.first
+                    )
+                )
+            }.error {
+                if (isCurrent(version)) fail(it.throwable.stackTraceStr, "search_failed")
+            }
+        }.onError {
+            if (isCurrent(version)) fail(it.stackTraceStr, "search_failed")
         }
         tasks.add(task)
     }
@@ -332,7 +425,7 @@ object Debug {
                         stage = STAGE_PLAY_LINE,
                         title = "选择播放线路",
                         options = playLines.mapIndexed { index, line ->
-                            Option(index, line.label, "${line.episode.size} 集")
+                            Option(index, line.label, "${line.episode.size} 集", id = line.id)
                         }
                     )
                 )
@@ -355,7 +448,7 @@ object Debug {
                 stage = STAGE_EPISODE,
                 title = "选择剧集",
                 options = line.episode.mapIndexed { episodeIndex, episode ->
-                    Option(episodeIndex, episode.label, "顺序 ${episode.order}")
+                    Option(episodeIndex, episode.label, "顺序 ${episode.order}", id = episode.id)
                 }
             )
         )
@@ -426,14 +519,38 @@ object Debug {
                 "数据" to selectedCover?.title.orEmpty(),
                 "播放线路" to selectedPlayLine?.label.orEmpty(),
                 "剧集" to episode.orEmpty(),
+                "搜索词" to currentSearchKeyword.orEmpty(),
                 "页参数" to currentPageKey.toString()
             ).filterValues { it.isNotEmpty() }
         )
     }
 
-    private fun fail(message: String) {
+    private fun fail(message: String, errorCode: String = "debug_failed") {
         log(debugSource, message, state = -1)
-        callback?.emit(Event(type = TYPE_ERROR, title = "调试失败", message = message))
+        callback?.emit(Event(type = TYPE_ERROR, title = "调试失败", message = message, errorCode = errorCode))
+    }
+
+    private fun resolveSelectionIndex(
+        stage: String,
+        index: Int?,
+        id: String?,
+        label: String?,
+    ): Int? {
+        val options = when (stage) {
+            STAGE_MAIN -> mainTabs.map { (it.ext?.toString()?.ifBlank { it.label } ?: it.label) to it.label }
+            STAGE_SUB -> subTabs.map { (it.ext?.ifBlank { it.label } ?: it.label) to it.label }
+            STAGE_CONTENT, STAGE_SEARCH -> contents.map { it.id to it.title }
+            STAGE_PLAY_LINE -> playLines.map { it.id to it.label }
+            STAGE_EPISODE -> selectedPlayLine?.episode?.map { it.id to it.label }.orEmpty()
+            else -> return null
+        }
+        if (!id.isNullOrBlank()) {
+            options.indexOfFirst { it.first == id }.takeIf { it >= 0 }?.let { return it }
+        }
+        if (!label.isNullOrBlank()) {
+            options.indexOfFirst { it.second == label }.takeIf { it >= 0 }?.let { return it }
+        }
+        return index?.takeIf { it in options.indices }
     }
 
     private fun mainTabType(type: Int): String = when (type) {
@@ -455,6 +572,7 @@ object Debug {
         val label: String,
         val detail: String = "",
         val image: String? = null,
+        val id: String? = null,
     )
 
     data class Event(
@@ -466,6 +584,10 @@ object Debug {
         val fields: Map<String, String> = emptyMap(),
         val pageKey: Int? = null,
         val nextPageKey: Int? = null,
+        val errorCode: String? = null,
+        val protocolVersion: Int? = null,
+        val sessionId: String? = null,
+        val requestId: String? = null,
     )
 
     interface Callback {
@@ -479,10 +601,13 @@ object Debug {
     private const val TYPE_SELECTION = "selection"
     private const val TYPE_RESULT = "result"
     private const val TYPE_CONTEXT = "context"
+    private const val TYPE_CAPTURE = "capture"
+    private const val MAX_CAPTURE_LENGTH = 64 * 1024
 
     private const val STAGE_MAIN = "main"
     private const val STAGE_SUB = "sub"
     private const val STAGE_CONTENT = "content"
+    private const val STAGE_SEARCH = "search"
     private const val STAGE_DETAIL = "detail"
     private const val STAGE_PLAY_LINE = "playLine"
     private const val STAGE_EPISODE = "episode"

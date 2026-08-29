@@ -316,7 +316,7 @@ class CartoonPlayingViewModel(
             // for mx player https://mx.j2inter.com/api
             putExtra("video_list", arrayOf(playerInfo.uri.toUri()))
             val list = arrayListOf<String>()
-            playerInfo.header?.iterator()?.forEach {
+            playerInfo.normalizedHeaders().forEach {
                 list.add(it.key)
                 list.add(it.value)
             }

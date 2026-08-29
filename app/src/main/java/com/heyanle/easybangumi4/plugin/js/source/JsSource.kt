@@ -51,6 +51,15 @@ class JsSource(
                 }
                 com.heyanle.easybangumi4.plugin.source.Debug.INSTANCE.log(Inject_Source.key, type+": "+JSON.stringify(data), true, true, 1);
             }
+
+            var DebugCapture = function(label, data) {
+                var content = typeof data === "string" ? data : JSON.stringify(data);
+                com.heyanle.easybangumi4.plugin.source.Debug.INSTANCE.capture(
+                    Inject_Source.key,
+                    String(label || "调试原文"),
+                    String(content || "")
+                );
+            }
             
             function makeCartoonCover(map) {
                 var id = map.id;

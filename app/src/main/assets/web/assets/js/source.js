@@ -11,11 +11,14 @@
     var selectionEvents = {};
     var currentSelection = null;
     var pageHistory = [];
-    var stageOrder = ["main", "sub", "content", "playLine", "episode"];
+    var requestSequence = 0;
+    var installPending = false;
+    var stageOrder = ["main", "sub", "content", "search", "playLine", "episode"];
     var stageLabels = {
         main: "主分类",
         sub: "次分类",
         content: "数据",
+        search: "搜索结果",
         playLine: "播放线路",
         episode: "剧集"
     };
@@ -59,11 +62,12 @@
             appendLog("无法发送命令：调试连接已断开", -1);
             return false;
         }
+        if (!payload.requestId) payload.requestId = "web-" + (++requestSequence);
         socket.send(JSON.stringify(payload));
         return true;
     }
 
-    function connect() {
+    function connect(initialPayload) {
         if (socket) socket.close();
         resetSession();
         setStatus("正在连接", "busy");
@@ -73,17 +77,25 @@
         socket = new WebSocket(protocol + host + ":" + (Number(port) + 1) + "/sourceDebug");
         socket.onopen = function () {
             setStatus("已连接", "online");
-            send({ tag: "debug", key: editor.getValue() });
+            send(initialPayload || { tag: "debug", key: editor.getValue() });
         };
         socket.onmessage = function (message) {
             handleMessage(message.data);
         };
         socket.onerror = function () {
+            if (installPending) {
+                installPending = false;
+                showLoading(false);
+            }
             setStatus("连接错误", "error");
             setBusy(false);
         };
         socket.onclose = function () {
             socket = null;
+            if (installPending) {
+                installPending = false;
+                showLoading(false);
+            }
             setStatus("已断开", "");
             setBusy(false);
         };
@@ -114,7 +126,21 @@
         } else if (event.type === "ready") {
             setBusy(false);
             setStatus(event.title || "已就绪", "online");
+        } else if (event.type === "hello" || event.type === "capabilities") {
+            if (event.protocolVersion) setStatus("已连接 · 协议 v" + event.protocolVersion, "online");
+        } else if (event.type === "capture") {
+            appendLog("[原文] " + (event.title || "调试原文") + " (" + ((event.fields || {}).length || 0) + " 字符)\n" + (event.message || ""), 1);
+        } else if (event.type === "installed") {
+            installPending = false;
+            showLoading(false);
+            setBusy(false);
+            setStatus(event.title || "插件已添加", "online");
+            appendLog((event.title || "插件已添加") + "：" + (event.message || ""), 1000);
         } else if (event.type === "error") {
+            if (installPending) {
+                installPending = false;
+                showLoading(false);
+            }
             setBusy(false);
             setStatus("调试出错", "error");
             renderError(event);
@@ -169,7 +195,13 @@
                 button.on("click", function () {
                     if (busy) return;
                     if (event.stage === "main" || event.stage === "sub") pageHistory = [];
-                    if (send({ tag: "select", stage: event.stage, index: String(option.index) })) {
+                    if (send({
+                        tag: "select",
+                        stage: event.stage,
+                        index: String(option.index),
+                        id: option.id || "",
+                        label: option.label || ""
+                    })) {
                         setBusy(true, "正在执行");
                     }
                 });
@@ -182,7 +214,7 @@
 
     function renderPager(event) {
         var pager = $("#pager");
-        if (event.stage !== "content") {
+        if (event.stage !== "content" && event.stage !== "search") {
             pager.removeClass("visible");
             return;
         }
@@ -265,6 +297,23 @@
         });
     }
 
+    function installPlugin() {
+        var source = editor.getValue();
+        if (!source.trim()) {
+            appendLog("插件源码不能为空", -1);
+            return;
+        }
+        installPending = true;
+        showLoading(true);
+        setStatus("正在添加插件", "busy");
+        var command = { tag: "install", key: source };
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            send(command);
+        } else {
+            connect(command);
+        }
+    }
+
     function showLoading(show) {
         $("body").toggleClass("loading", show);
     }
@@ -283,7 +332,8 @@
             success: function (source) { editor.setValue(source); }
         });
 
-        $("[data-act='test']").on("click", connect);
+        $("[data-act='test']").on("click", function () { connect(); });
+        $("[data-act='install']").on("click", installPlugin);
         $("[data-act='download']").on("click", downloadPlugin);
         $("#clear-log").on("click", function () { $("#log").empty(); });
         $("#page-next").on("click", function () { requestPage($(this).data("key"), true); });
@@ -293,6 +343,16 @@
         $("#page-go").on("click", function () { requestPage($("#page-key").val(), true); });
         $("#page-key").on("keydown", function (event) {
             if (event.key === "Enter") requestPage($(this).val(), true);
+        });
+        $("#search-form").on("submit", function (event) {
+            event.preventDefault();
+            var keyword = $("#search-keyword").val().trim();
+            if (!keyword) {
+                appendLog("请输入搜索关键词", -1);
+                return;
+            }
+            pageHistory = [];
+            if (send({ tag: "search", keyword: keyword, page: "0" })) setBusy(true, "正在搜索");
         });
     });
 })();

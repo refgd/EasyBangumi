@@ -6,6 +6,9 @@ import com.heyanle.easybangumi4.cartoon.story.download.runtime.CartoonDownloadRu
 import com.heyanle.easybangumi4.cartoon.story.download.utils.M3U8Utils
 import com.heyanle.easybangumi4.cartoon.story.download.utils.DownloadFileValidator
 import com.heyanle.easybangumi4.cartoon.story.download.utils.DownloadProgressUtils
+import com.heyanle.easybangumi4.exo.HlsPlaylistFilter
+import com.heyanle.easybangumi4.exo.PngTailPayload
+import com.heyanle.easybangumi4.plugin.api.entity.HlsOptions
 import com.heyanle.easybangumi4.utils.CoroutineProvider
 import com.heyanle.easybangumi4.utils.EasyMemoryInfo
 import com.heyanle.easybangumi4.utils.getCachePath
@@ -188,11 +191,23 @@ class TranscodeAction(
         }
         val encryptionMethod = entity.method.orEmpty()
         val needDecrypt = encryptionMethod.equals("AES-128", ignoreCase = true)
+        val localPlaylistText = localM3U8.readText(Charsets.UTF_8)
+        val sourceUrlsFile = File("${entity.filePath}.hls-urls")
+        val sourceUrls = sourceUrlsFile.takeIf { it.isFile }
+            ?.readLines(Charsets.UTF_8)
+            ?.filter { it.isNotBlank() }
+        val hlsOptions = cartoonDownloadRuntime.playerInfo?.hlsOptions ?: HlsOptions()
+        val filteredPlaylist = HlsPlaylistFilter.filter(
+            localPlaylistText,
+            localM3U8.toURI().toString(),
+            hlsOptions,
+            sourceUrls,
+        )
         if (encryptionMethod.isNotBlank() &&
             !encryptionMethod.equals("NONE", ignoreCase = true) &&
             !needDecrypt
         ) {
-            return copyInputPlaylist(localM3U8, realTarget)
+            return writePlaylist(filteredPlaylist.playlist, realTarget)
         }
         scope.launch {
             cartoonDownloadRuntime.dispatchToBusThrottled(
@@ -204,15 +219,17 @@ class TranscodeAction(
         // 将本地 m3u8 文件中的 ts 全都解密改写成 tsh 文件
         // 输出新的 m3u8 文件，去除 key 标签，文件路径改为 tsh
         // 如果 tsh 文件的文件头是 png，则去除文件头
-        val it = localM3U8.readLines().iterator()
+        val it = localPlaylistText.lines().iterator()
         val tsFiles = arrayListOf<File>()
         val targetTsFiles = arrayListOf<File>()
+        val segmentSequenceNumbers = arrayListOf<Long>()
         var mediaSequence = 0L
+        var segmentIndex = 0
         val memoryInfo = EasyMemoryInfo(application)
         memoryInfo.update()
         // 内存不足直接跳过
         if (memoryInfo.lowMemory) {
-            return copyInputPlaylist(localM3U8, realTarget)
+            return writePlaylist(filteredPlaylist.playlist, realTarget)
         }
         try {
             target.writer(Charsets.UTF_8).buffered().use { writer ->
@@ -228,6 +245,11 @@ class TranscodeAction(
                         } else {
                             val ts = it.next()
                             val file = File(ts)
+                            if (segmentIndex in filteredPlaylist.removedSegmentIndices) {
+                                file.delete()
+                                segmentIndex++
+                                continue
+                            }
                             val targetFile = File("${ts}h")
                             // 如果大于当前可用内存 80% 以上就不解了直接丢 ffmpeg 然后祈祷他没有改文件头
                             memoryInfo.update()
@@ -235,11 +257,13 @@ class TranscodeAction(
                                 || (Runtime.getRuntime()?.freeMemory()
                                     ?: Long.MAX_VALUE) * 0.8 <= file.length()
                             ) {
-                                return copyInputPlaylist(localM3U8, realTarget)
+                                return writePlaylist(filteredPlaylist.playlist, realTarget)
                             }
                             tsFiles.add(file)
                             // ts -> tsh
                             targetTsFiles.add(targetFile)
+                            segmentSequenceNumbers.add(mediaSequence + segmentIndex)
+                            segmentIndex++
                             writer.write(line)
                             writer.newLine()
                             writer.write(targetFile.absolutePath)
@@ -256,7 +280,7 @@ class TranscodeAction(
             }
         } catch (e: OutOfMemoryError) {
             e.printStackTrace()
-            return copyInputPlaylist(localM3U8, realTarget)
+            return writePlaylist(filteredPlaylist.playlist, realTarget)
         } catch (e: IOException) {
             e.printStackTrace()
             // 解密失败
@@ -317,7 +341,7 @@ class TranscodeAction(
             }
             val s = ts.readBytes()
             val segmentIv = entity.iv.takeIf { it.isNotBlank() }
-                ?: "0x${(mediaSequence + i).toString(16).padStart(32, '0')}"
+                ?: "0x${segmentSequenceNumbers[i].toString(16).padStart(32, '0')}"
             val res = if (needDecrypt) M3U8Utils.decrypt(
                 s,
                 s.size,
@@ -325,16 +349,12 @@ class TranscodeAction(
                 segmentIv,
                 entity.method
             ) else s
-            // 文件头伪装成 png
-            val rr = res ?: return false
-            if (rr.size >= 4) {
-                if (rr[0].toInt() == 0x89 && rr[1].toInt() == 0x50 && rr[2].toInt() == 0x4E && rr[3].toInt() == 0x47) {
-                    rr[0] = 0xff.toByte()
-                    rr[1] = 0xff.toByte()
-                    rr[2] = 0xff.toByte()
-                    rr[3] = 0xff.toByte()
-                }
-            }
+            val decrypted = res ?: return false
+            val rr = if (hlsOptions.segmentPayload.equals(
+                    HlsOptions.SEGMENT_PAYLOAD_RAW,
+                    ignoreCase = true,
+                )
+            ) decrypted else PngTailPayload.stripPngPrefix(decrypted)
             tshTemp.writeBytes(rr)
             if (!tshTemp.renameTo(tsh)) {
                 tshTemp.copyTo(tsh, overwrite = true)
@@ -352,10 +372,10 @@ class TranscodeAction(
         return DownloadFileValidator.validateLocalM3u8(realTarget) == null
     }
 
-    private fun copyInputPlaylist(source: File, target: File): Boolean {
+    private fun writePlaylist(playlist: String, target: File): Boolean {
         return runCatching {
             target.delete()
-            source.copyTo(target, overwrite = true)
+            target.writeText(playlist, Charsets.UTF_8)
             DownloadFileValidator.validateLocalM3u8(target) == null
         }.getOrDefault(false)
     }

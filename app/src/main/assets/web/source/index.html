@@ -20,6 +20,7 @@
             </div>
             <div class="actions">
                 <button type="button" class="primary" data-act="test">开始调试</button>
+                <button type="button" data-act="install">添加插件</button>
                 <button type="button" data-act="download">下载插件</button>
             </div>
         </header>
@@ -32,6 +33,10 @@
 
             <section class="pane debug-pane">
                 <div class="pane-title">交互调试</div>
+                <form id="search-form" class="debug-search">
+                    <input id="search-keyword" type="search" placeholder="搜索源内容" autocomplete="off" />
+                    <button type="submit">搜索</button>
+                </form>
                 <div id="context" class="context"></div>
                 <nav id="steps" class="steps"></nav>
                 <div class="selection-head">

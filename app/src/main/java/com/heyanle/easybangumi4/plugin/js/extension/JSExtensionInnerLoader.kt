@@ -23,6 +23,7 @@ import com.heyanle.easybangumi4.plugin.js.source.JsSource
 class JSExtensionInnerLoader(
     val js: String,
     val jsRuntime: JSRuntimeProvider,
+    private val appendDebugSuffix: Boolean = true,
 ): ExtensionLoader {
 
     override val key: String
@@ -61,7 +62,7 @@ class JSExtensionInnerLoader(
                 val value = line.substring(spacerAfterAtIndex + 1)
                 map[key] = value
 
-                if(key == JS_SOURCE_TAG_KEY) {
+                if(key == JS_SOURCE_TAG_KEY && appendDebugSuffix) {
                     map[key] = map[key] + ".__debug__"
                 }
             }else{

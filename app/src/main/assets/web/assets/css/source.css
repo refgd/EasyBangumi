@@ -56,6 +56,9 @@ button:disabled { cursor: wait; opacity: .5; }
 .editor-wrap .CodeMirror { position: absolute; inset: 0; width: 100%; height: 100%; font-size: 13px; }
 
 .debug-pane { display: flex; flex-direction: column; }
+.debug-search { display: flex; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.debug-search input { min-width: 0; flex: 1; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); }
+.debug-search button { border: 1px solid var(--border); border-radius: 4px; padding: 6px 11px; background: var(--panel-2); color: var(--text); }
 .context { display: flex; gap: 6px; padding: 8px 10px 0; overflow-x: auto; min-height: 8px; }
 .context span { flex: 0 0 auto; padding: 3px 7px; border: 1px solid var(--border); border-radius: 4px; color: var(--muted); font-size: 12px; }
 .context b { color: var(--text); font-weight: 500; }

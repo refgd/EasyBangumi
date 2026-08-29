@@ -9,6 +9,7 @@ import com.heyanle.easybangumi4.plugin.js.extension.JSExtensionLoader
 import com.heyanle.easybangumi4.plugin.js.runtime.JSRuntimeProvider
 import kotlinx.coroutines.CoroutineDispatcher
 import java.io.File
+import java.io.IOException
 import java.io.InputStream
 
 /**
@@ -83,24 +84,31 @@ class JsExtensionProvider(
             }
         }
         cacheFile.deleteOnExit()
-        val loader = loadExtensionLoader(listOf(cacheFile)).firstOrNull() ?: return
-        if (loader.canLoad()) {
-            // 改名为 key
-            val ext = loader.load() as? ExtensionInfo.Installed
-            val source = ext?.sources?.firstOrNull()
-            val targetFile = if (ext != null && source != null) {
-                val suffix = when  {
-                    displayName.endsWith(EXTENSION_CRY_SUFFIX) -> EXTENSION_CRY_SUFFIX
-                    else -> EXTENSION_SUFFIX
-                }
-                File(folderPath, source.key + "." + suffix)
-            } else {
-                File(folderPath, fileName)
-            }
-            targetFile.delete()
-            cacheFile.copyTo(targetFileTemp)
-            targetFileTemp.renameTo(targetFile)
+        val loader = loadExtensionLoader(listOf(cacheFile)).firstOrNull()
+            ?: throw IOException("无法创建插件加载器")
+        if (!loader.canLoad()) throw IOException("插件文件格式不受支持")
+
+        val loaded = loader.load()
+        val ext = loaded as? ExtensionInfo.Installed
+            ?: throw IOException((loaded as? ExtensionInfo.InstallError)?.errMsg ?: "插件加载失败")
+        val source = ext.sources.firstOrNull() ?: throw IOException("插件中没有可安装的番源")
+        val suffix = when {
+            displayName.endsWith(EXTENSION_CRY_SUFFIX) -> EXTENSION_CRY_SUFFIX
+            else -> EXTENSION_SUFFIX
         }
+        val targetFile = File(folderPath, source.key + "." + suffix)
+        File(folderPath, source.key + "." + EXTENSION_SUFFIX).delete()
+        File(folderPath, source.key + "." + EXTENSION_CRY_SUFFIX).delete()
+        cacheFile.copyTo(targetFileTemp, overwrite = true)
+        if (!targetFileTemp.renameTo(targetFile)) {
+            targetFileTemp.copyTo(targetFile, overwrite = true)
+            targetFileTemp.delete()
+        }
+        if (!targetFile.isFile) throw IOException("插件文件写入失败")
+        cacheFolderFile.deleteRecursively()
+        cacheFolderFile.mkdirs()
+        scanFolder()
+        fileObserver.startWatching()
     }
 
 }

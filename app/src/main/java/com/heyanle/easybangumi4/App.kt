@@ -1,5 +1,6 @@
 package com.heyanle.easybangumi4
 
+import android.app.Activity
 import android.app.ActivityManager
 import android.app.Application
 import android.app.Notification
@@ -7,11 +8,13 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
+import android.os.Bundle
 import android.os.Looper
 import android.os.Process
 import com.heyanle.easybangumi4.constant.NotificationId.channelIdDownload
 import com.heyanle.easybangumi4.constant.NotificationId.channelIdWeb
 import com.heyanle.easybangumi4.setting.SettingMMKVPreferences
+import com.heyanle.easybangumi4.web.services.WebService
 import com.heyanle.inject.core.Inject
 import splitties.systemservices.notificationManager
 
@@ -69,9 +72,29 @@ class App : Application() {
         if (isMainProcess()) {
             Scheduler.runOnAppCreate(this)
             createNotificationChannels()
+            if (BuildConfig.DEBUG) startDebugWebServiceWhenForeground()
         }
 
 
+    }
+
+    private fun startDebugWebServiceWhenForeground() {
+        val callback = object : ActivityLifecycleCallbacks {
+            override fun onActivityResumed(activity: Activity) {
+                unregisterActivityLifecycleCallbacks(this)
+                if (!WebService.isRun.value) {
+                    WebService.startForeground(activity)
+                }
+            }
+
+            override fun onActivityCreated(activity: Activity, state: Bundle?) = Unit
+            override fun onActivityStarted(activity: Activity) = Unit
+            override fun onActivityPaused(activity: Activity) = Unit
+            override fun onActivityStopped(activity: Activity) = Unit
+            override fun onActivitySaveInstanceState(activity: Activity, state: Bundle) = Unit
+            override fun onActivityDestroyed(activity: Activity) = Unit
+        }
+        registerActivityLifecycleCallbacks(callback)
     }
 
     private fun isMainProcess(): Boolean {

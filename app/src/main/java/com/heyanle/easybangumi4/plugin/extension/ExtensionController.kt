@@ -19,6 +19,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
+import java.io.ByteArrayInputStream
+import kotlin.coroutines.resume
+import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
  * InstalledAppExtensionProvider    ↘
@@ -164,6 +167,24 @@ class ExtensionController(
                 return@withContext e
             }
         }
+    }
+
+    suspend fun appendJsExtensionSource(displayName: String, source: String): Exception? {
+        val error = suspendCancellableCoroutine { continuation ->
+            jsExtensionProvider.appendExtensionStream(
+                displayName,
+                ByteArrayInputStream(source.toByteArray(Charsets.UTF_8)),
+            ) { error ->
+                if (continuation.isActive) continuation.resume(error)
+            }
+        }
+        if (error == null) jsExtensionProvider.awaitScanFolder()
+        return error
+    }
+
+    fun hasJsExtension(key: String): Boolean {
+        return File(jsExtensionFolder, "$key.ebg.js").isFile ||
+            File(jsExtensionFolder, "$key.ebg.jsc").isFile
     }
 
 

@@ -78,6 +78,10 @@ abstract class AbsFolderExtensionProvider(
         }
     }
 
+    suspend fun awaitScanFolder() {
+        lastScanFolderJob?.join()
+    }
+
     abstract fun checkName(displayName: String): Boolean
     abstract fun getNameWhenLoad(displayName: String, time: Long, atomicLong: Long): String
 
@@ -101,7 +105,7 @@ abstract class AbsFolderExtensionProvider(
                 val inputStream = File(path).inputStream()
                 innerAppendExtension(path, inputStream)
                 callback?.invoke(null)
-            } catch (e: IOException) {
+            } catch (e: Exception) {
                 e.printStackTrace()
                 callback?.invoke(e)
             }
@@ -113,7 +117,7 @@ abstract class AbsFolderExtensionProvider(
             try {
                 innerAppendExtension(displayName, inputStream)
                 callback?.invoke(null)
-            } catch (e: IOException) {
+            } catch (e: Exception) {
                 e.printStackTrace()
                 callback?.invoke(e)
             }
