@@ -10,6 +10,7 @@ import com.heyanle.easybangumi4.utils.aesDecryptTo
 import com.heyanle.easybangumi4.utils.getInnerCachePath
 import com.heyanle.easybangumi4.utils.getMD5
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * 加密 js 加载，解密后委托给 JsExtensionLoader
@@ -27,6 +28,7 @@ class JSExtensionCryLoader(
 
         // 加密 js 文件首行
         val FIRST_LINE_MARK = "easybangumi.cryjs".toByteArray()
+        private val decryptLocks = ConcurrentHashMap<String, Any>()
     }
 
     private val plaintextCacheFolder = APP.getInnerCachePath("js_plaintext")
@@ -35,7 +37,9 @@ class JSExtensionCryLoader(
     override val key: String
         get() = "js:${file.path}"
 
-    override fun load(): ExtensionInfo? {
+    override fun load(): ExtensionInfo? = synchronized(
+        decryptLocks.computeIfAbsent(file.absolutePath) { Any() }
+    ) {
         File(plaintextCacheFolder).mkdirs()
 
 
@@ -75,7 +79,7 @@ class JSExtensionCryLoader(
         plaintextFile.deleteOnExit()
 
         // 3. 加载
-        return JSExtensionLoader(plaintextFile, jsRuntime, file.absolutePath).load()?.let {
+        JSExtensionLoader(plaintextFile, jsRuntime, file.absolutePath).load()?.let {
             when(it) {
                 is ExtensionInfo.InstallError -> {
                     it.copy(sourcePath = file.absolutePath)

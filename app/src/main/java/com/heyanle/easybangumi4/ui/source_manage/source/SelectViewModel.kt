@@ -1,11 +1,14 @@
 package com.heyanle.easybangumi4.ui.source_manage.source
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.heyanle.easybangumi4.LauncherBus
 import com.heyanle.easybangumi4.plugin.extension.ExtensionController
 import com.heyanle.easybangumi4.plugin.extension.ExtensionInfo
 import com.heyanle.easybangumi4.plugin.extension.push.ExtensionPushController
+import com.heyanle.easybangumi4.plugin.api.Source
+import com.heyanle.easybangumi4.plugin.js.extension.JsExtensionPackage
 import com.heyanle.easybangumi4.ui.common.moeDialogAlert
 import com.heyanle.easybangumi4.ui.common.moeSnackBar
 import com.heyanle.easybangumi4.utils.stringRes
@@ -41,7 +44,14 @@ class SelectViewModel: ViewModel() {
     sealed class Dialog {
         data class Loading(val msg: String): Dialog()
         data class ErrorOrCompletely(val msg: String): Dialog()
+        data class ConfirmOverwrite(
+            val fileName: String,
+            val sourceKey: String,
+            val targetUri: Uri,
+        ): Dialog()
     }
+
+    private var lastExportFolder: Uri? = null
 
     init {
         viewModelScope.launch {
@@ -89,7 +99,68 @@ class SelectViewModel: ViewModel() {
         }
     }
 
+    fun exportPackage(source: Source) {
+        LauncherBus.current?.getDocumentTree(lastExportFolder) { uri ->
+            if (uri == null) {
+                return@getDocumentTree
+            }
+            lastExportFolder = uri
+            viewModelScope.launch {
+                _state.update {
+                    it.copy(dialog = Dialog.Loading(stringRes(com.heyanle.easy_i18n.R.string.exporting_source_package)))
+                }
+                runCatching {
+                    extensionController.prepareJsExtensionPackageTarget(source.key, uri)
+                }.onSuccess { target ->
+                    if (target.exists) {
+                        _state.update {
+                            it.copy(
+                                dialog = Dialog.ConfirmOverwrite(
+                                    fileName = "${source.key}.${JsExtensionPackage.SUFFIX}",
+                                    sourceKey = source.key,
+                                    targetUri = target.uri,
+                                )
+                            )
+                        }
+                    } else {
+                        exportPackageTo(source.key, target.uri)
+                    }
+                }.onFailure { error ->
+                    _state.update {
+                        it.copy(dialog = Dialog.ErrorOrCompletely(error.message ?: stringRes(com.heyanle.easy_i18n.R.string.load_error)))
+                    }
+                }
+            }
+        }
+    }
+
+    fun confirmPackageOverwrite() {
+        val dialog = _state.value.dialog as? Dialog.ConfirmOverwrite ?: return
+        exportPackageTo(dialog.sourceKey, dialog.targetUri)
+    }
+
+    fun dismissPackageOverwrite() {
+        _state.update { it.copy(dialog = null) }
+    }
+
+    private fun exportPackageTo(sourceKey: String, targetUri: Uri) {
+        viewModelScope.launch {
+            _state.update {
+                it.copy(dialog = Dialog.Loading(stringRes(com.heyanle.easy_i18n.R.string.exporting_source_package)))
+            }
+            val error = extensionController.exportJsExtensionPackage(sourceKey, targetUri)
+            _state.update {
+                it.copy(
+                    dialog = Dialog.ErrorOrCompletely(
+                        error?.message ?: stringRes(com.heyanle.easy_i18n.R.string.export_source_package_completely)
+                    )
+                )
+            }
+        }
+    }
+
     fun cleanErrorOrCompletely(){
+        _state.update { it.copy(dialog = null) }
         extensionPushController.cleanErrorOrCompletely()
     }
 

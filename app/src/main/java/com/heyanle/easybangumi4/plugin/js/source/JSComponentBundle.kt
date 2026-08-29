@@ -230,11 +230,14 @@ class JSComponentBundle(
     override fun destory() {
         this.release()
 
-        val jsFile = File(APP.getFilePath("extension-js"), "${jsSource.key}.ebg.jsc")
+        val extensionFolder = File(APP.getFilePath("extension-js"))
+        val jsFile = File(extensionFolder, "${jsSource.key}.ebg.jsc")
+        val plainJsFile = File(extensionFolder, "${jsSource.key}.ebg.js")
+        val iconFile = File(extensionFolder, "${jsSource.key}.icon")
         runCatching {
-            if (jsFile.exists()) {
-                jsFile.delete()
-            }
+            jsFile.delete()
+            plainJsFile.delete()
+            iconFile.delete()
         }.onFailure {
             it.printStackTrace()
         }

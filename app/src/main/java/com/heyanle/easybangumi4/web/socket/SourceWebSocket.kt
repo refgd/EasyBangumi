@@ -1,6 +1,7 @@
 package com.heyanle.easybangumi4.web.socket
 
 import com.google.gson.Gson
+import android.util.Base64
 import com.heyanle.easybangumi4.plugin.extension.ExtensionInfo
 import com.heyanle.easybangumi4.plugin.extension.ExtensionController
 import com.heyanle.easybangumi4.plugin.js.extension.JSExtensionInnerLoader
@@ -49,7 +50,7 @@ class SourceWebSocket(
                  title = "EasyBangumi source debugger",
                  fields = linkedMapOf(
                      "protocolVersion" to PROTOCOL_VERSION.toString(),
-                     "capabilities" to "search,stableSelector,paging,requestId,debugCapture,install"
+                     "capabilities" to "search,stableSelector,paging,requestId,debugCapture,install,localIcon"
                  )
              )
          )
@@ -114,7 +115,7 @@ class SourceWebSocket(
                                  }
                          }
                      } else if (tag == "install" && key != null) {
-                         installSource(key)
+                         installSource(key, debugBean["icon"])
                      } else if (tag == "select") {
                          if (Debug.callback !== this@SourceWebSocket) {
                              emit(Debug.Event(type = "error", title = "会话已失效", message = "请重新点击开始调试", errorCode = "session_expired"))
@@ -172,7 +173,7 @@ class SourceWebSocket(
          }
      }
 
-    private suspend fun installSource(sourceCode: String) {
+    private suspend fun installSource(sourceCode: String, iconData: String?) {
         if (sourceCode.toByteArray(Charsets.UTF_8).size > MAX_SOURCE_BYTES) {
             emit(Debug.Event(type = "error", title = "添加插件失败", message = "插件源码不能超过 2 MiB", errorCode = "source_too_large"))
             return
@@ -188,9 +189,22 @@ class SourceWebSocket(
                     return
                 }
                 val existed = extensionController.hasJsExtension(extension.key)
+                val iconBytes = try {
+                    iconData?.takeIf { it.isNotBlank() }?.let { encoded ->
+                        val payload = encoded.substringAfter(',', encoded)
+                        val bytes = Base64.decode(payload, Base64.DEFAULT)
+                        if (bytes.size > MAX_ICON_BYTES) throw IOException("图标不能超过 4 MiB")
+                        bytes
+                    }
+                } catch (e: Exception) {
+                    emit(Debug.Event(type = "error", title = "添加插件失败", message = "本地图标无效: " + e.message, errorCode = "invalid_local_icon"))
+                    return
+                }
                 val error = extensionController.appendJsExtensionSource(
                     "${extension.key}.ebg.js",
+                    extension.key,
                     sourceCode,
+                    iconBytes,
                 )
                 if (error != null) {
                     emit(Debug.Event(type = "error", title = "添加插件失败", message = error.message ?: error.stackTraceToString(), errorCode = "extension_install_failed"))
@@ -242,6 +256,7 @@ class SourceWebSocket(
     companion object {
         const val PROTOCOL_VERSION = 2
         private const val MAX_SOURCE_BYTES = 2 * 1024 * 1024
+        private const val MAX_ICON_BYTES = 4 * 1024 * 1024
         private val SAFE_EXTENSION_KEY = Regex("[A-Za-z0-9._-]+")
     }
 

@@ -632,6 +632,11 @@
     <string name="extension_push_error">番源添加错误</string>
 
     <string name="insert_local">本地导入</string>
+    <string name="export_source_package">导出整体包</string>
+    <string name="exporting_source_package">正在导出番源整体包</string>
+    <string name="export_source_package_completely">番源整体包导出完成</string>
+    <string name="overwrite">覆盖</string>
+    <string name="overwrite_source_package_confirmation">文件 %1$s 已存在，是否覆盖？</string>
     <string name="insert_remote">网络导入</string>
 
     <string name="extension_push_from_input">手动输入添加</string>

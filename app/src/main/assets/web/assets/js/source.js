@@ -13,6 +13,7 @@
     var pageHistory = [];
     var requestSequence = 0;
     var installPending = false;
+    var localIconData = "";
     var stageOrder = ["main", "sub", "content", "search", "playLine", "episode"];
     var stageLabels = {
         main: "主分类",
@@ -306,7 +307,7 @@
         installPending = true;
         showLoading(true);
         setStatus("正在添加插件", "busy");
-        var command = { tag: "install", key: source };
+        var command = { tag: "install", key: source, icon: localIconData };
         if (socket && socket.readyState === WebSocket.OPEN) {
             send(command);
         } else {
@@ -333,6 +334,27 @@
         });
 
         $("[data-act='test']").on("click", function () { connect(); });
+        $("[data-act='icon']").on("click", function () { $("#plugin-icon").trigger("click"); });
+        $("#plugin-icon").on("change", function () {
+            var file = this.files && this.files[0];
+            if (!file) return;
+            if (!file.type || file.type.indexOf("image/") !== 0) {
+                appendLog("请选择图片文件", -1);
+                return;
+            }
+            if (file.size > 4 * 1024 * 1024) {
+                appendLog("图标不能超过 4 MiB", -1);
+                return;
+            }
+            var reader = new FileReader();
+            reader.onload = function () {
+                localIconData = String(reader.result || "");
+                appendLog("已选择本地图标：" + file.name, 1000);
+                $("[data-act='icon']").text("已选图标");
+            };
+            reader.onerror = function () { appendLog("读取图标失败", -1); };
+            reader.readAsDataURL(file);
+        });
         $("[data-act='install']").on("click", installPlugin);
         $("[data-act='download']").on("click", downloadPlugin);
         $("#clear-log").on("click", function () { $("#log").empty(); });

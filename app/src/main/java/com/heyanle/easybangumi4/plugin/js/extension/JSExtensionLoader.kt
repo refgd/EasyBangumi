@@ -2,6 +2,7 @@ package com.heyanle.easybangumi4.plugin.js.extension
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Javascript
+import android.net.Uri
 import com.heyanle.easybangumi4.crash.SourceCrashController
 import com.heyanle.easybangumi4.plugin.extension.ExtensionInfo
 import com.heyanle.easybangumi4.plugin.extension.loader.AbsExtensionLoader
@@ -98,6 +99,20 @@ class JSExtensionLoader(
         val hasPref = map[JS_SOURCE_HAS_PREF]?.toIntOrNull() ?: 0
         val hasSearch = map[JS_SOURCE_HAS_SEARCH]?.toIntOrNull() ?: 0
         map["sourcePath"] = if (realPath.isNotEmpty()) realPath else file.absolutePath
+        val installedFile = File(map["sourcePath"].orEmpty())
+        val installedFolder = installedFile.parentFile ?: file.parentFile ?: File(".")
+        val localIcon = JsExtensionPackage.localIconFile(installedFolder, key)
+        if (localIcon.isFile) {
+            map[JS_SOURCE_TAG_COVER] = Uri.fromFile(localIcon).buildUpon()
+                .appendQueryParameter("v", localIcon.lastModified().toString())
+                .build()
+                .toString()
+        } else {
+            map[JS_SOURCE_TAG_COVER]?.let { cover ->
+                val relativeIcon = File(installedFolder, cover)
+                if (relativeIcon.isFile) map[JS_SOURCE_TAG_COVER] = Uri.fromFile(relativeIcon).toString()
+            }
+        }
 
         val libErrorMsg = if (SourceCrashController.needBlock) {
             "安全模式阻断"

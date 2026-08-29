@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.VerticalAlignTop
 import androidx.compose.material3.AlertDialog
@@ -50,6 +51,7 @@ import com.heyanle.easybangumi4.LocalNavController
 import com.heyanle.easybangumi4.navigationSourceConfig
 import com.heyanle.easybangumi4.plugin.api.IconSource
 import com.heyanle.easybangumi4.plugin.js.source.getIconWithAsyncOrDrawable
+import com.heyanle.easybangumi4.plugin.js.source.JsSource
 import com.heyanle.easybangumi4.plugin.source.ConfigSource
 import com.heyanle.easybangumi4.plugin.source.SourceInfo
 import com.heyanle.easybangumi4.ui.common.EasyDeleteDialog
@@ -217,6 +219,9 @@ fun Source() {
                                     vm.move(currentIndex, 0)
                                     vm.onDragEnd()
                                 }
+                            },
+                            onExport = {
+                                svm.exportPackage(source)
                             }
                         )
                     }
@@ -260,6 +265,24 @@ fun Source() {
                 }
             )
         }
+        is SelectViewModel.Dialog.ConfirmOverwrite -> {
+            AlertDialog(
+                onDismissRequest = svm::dismissPackageOverwrite,
+                dismissButton = {
+                    TextButton(onClick = svm::dismissPackageOverwrite) {
+                        Text(text = stringResource(id = R.string.cancel))
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = svm::confirmPackageOverwrite) {
+                        Text(text = stringResource(id = R.string.overwrite))
+                    }
+                },
+                text = {
+                    Text(stringResource(id = R.string.overwrite_source_package_confirmation, sta.dialog.fileName))
+                },
+            )
+        }
         else -> {}
     }
 }
@@ -271,6 +294,7 @@ fun SourceItem(
     onCheckedChange: (ConfigSource, Boolean) -> Unit,
     onClick: (ConfigSource) -> Unit,
     moveToTop: () -> Unit,
+    onExport: () -> Unit,
 ) {
 
     val sourceInfo = configSource.sourceInfo
@@ -353,6 +377,21 @@ fun SourceItem(
                                     Icon(Icons.Filled.VerticalAlignTop, contentDescription = stringResource(id = R.string.push_pin))
                                 }
                             )
+
+                            if (sourceInfo.source is JsSource) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(text = stringResource(id = R.string.export_source_package))
+                                    },
+                                    onClick = {
+                                        showItMenu = false
+                                        onExport()
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Filled.Share, contentDescription = stringResource(id = R.string.export_source_package))
+                                    }
+                                )
+                            }
 
                             DropdownMenuItem(
                                 text = {
