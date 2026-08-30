@@ -50,11 +50,18 @@ import com.heyanle.easybangumi4.LocalNavController
 import com.heyanle.easybangumi4.cartoon.entity.CartoonInfo
 import com.heyanle.easybangumi4.cartoon.entity.PlayLineWrapper
 import com.heyanle.easybangumi4.navigationCartoonTag
+import com.heyanle.easybangumi4.navigationAiChat
 import com.heyanle.easybangumi4.navigationSearch
 import com.heyanle.easybangumi4.pip.PipController
 import com.heyanle.easybangumi4.plugin.api.entity.CartoonSummary
 import com.heyanle.easybangumi4.plugin.api.entity.Episode
+import com.heyanle.easybangumi4.plugin.extension.ExtensionController
+import com.heyanle.easybangumi4.plugin.extension.ExtensionInfo
 import com.heyanle.easybangumi4.setting.SettingPreferences
+import com.heyanle.easybangumi4.ui.ai.AiModelSelectionDialog
+import com.heyanle.easybangumi4.ui.ai.AiWorkspaceStore
+import com.heyanle.easybangumi4.ui.ai.AI_PRODUCT_NAME
+import com.heyanle.easybangumi4.ui.ai.AiSkillCapability
 import com.heyanle.easybangumi4.ui.cartoon_play.cartoon_recorded.CartoonRecorded
 import com.heyanle.easybangumi4.ui.cartoon_play.view_model.CartoonPlayViewModel
 import com.heyanle.easybangumi4.ui.cartoon_play.view_model.CartoonPlayViewModelFactory
@@ -111,6 +118,9 @@ fun CartoonPlay(
     val detailedState = detailedVM.stateFlow.collectAsState()
     val playState = playVM.curringPlayState.collectAsState()
     val playingState = playingVM.playingState.collectAsState()
+    val extensionController: ExtensionController by Inject.injectLazy()
+    val extensionState by extensionController.state.collectAsState()
+    val aiWorkspace by AiWorkspaceStore.state.collectAsState()
 
     var downloadModel by remember {
         mutableStateOf<Triple<CartoonInfo, PlayLineWrapper, List<Episode>>?>(null)
@@ -121,6 +131,8 @@ fun CartoonPlay(
     var saveDialogState by remember {
         mutableStateOf<Triple<CartoonInfo, PlayLineWrapper, List<Episode>>?>(null)
     }
+    var askAiRepairPlayList by remember { mutableStateOf<Boolean?>(null) }
+    var repairAwaitingModel by remember { mutableStateOf<PlaybackRepairRequest?>(null) }
     
     DisposableEffect(Unit) {
         PipController.bindPlayer(playingVM.exoPlayer)
@@ -199,7 +211,8 @@ fun CartoonPlay(
                 onSave = {
                     controlVM.onPlayPause(false)
                     saveDialogState = it
-                }
+                },
+                onAskAi = { repairPlayList -> askAiRepairPlayList = repairPlayList },
             )
 
             downloadModel?.let {
@@ -257,6 +270,88 @@ fun CartoonPlay(
             }
 
 
+        }
+
+        askAiRepairPlayList?.let { repairPlayList ->
+            val cartoon = detailedState.value.cartoonInfo
+            val currentPlay = playState.value
+            AlertDialog(
+                onDismissRequest = { askAiRepairPlayList = null },
+                title = {
+                    Text(if (repairPlayList) "询问 AI 修复播放列表？" else "询问 AI 修复番源？")
+                },
+                text = {
+                    Text(
+                        if (repairPlayList) {
+                            "将把当前番源和作品信息发送到对应的 AI 会话，检查详情、播放来源和剧集列表为何为空。"
+                        } else {
+                            "将把当前番源、作品、线路、剧集和播放错误发送到对应的 AI 会话，并自动开始排查。"
+                        }
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        if (cartoon == null) return@TextButton
+                        val task = if (repairPlayList) {
+                            playListRepairTask(cartoon)
+                        } else {
+                            playbackRepairTask(
+                                cartoon = cartoon,
+                                playState = currentPlay,
+                                playingState = playingState.value,
+                            )
+                        }
+                        val skillCapability = if (repairPlayList) {
+                            AiSkillCapability.DETAIL
+                        } else {
+                            AiSkillCapability.PLAYBACK
+                        }
+                        val extension = extensionState.extensionInfoMap.values
+                            .filterIsInstance<ExtensionInfo.Installed>()
+                            .firstOrNull { info -> info.sources.any { it.key == source } }
+                        askAiRepairPlayList = null
+                        val existing = AiWorkspaceStore.sourceSession(source, extension)
+                        val canReuseSession = existing != null &&
+                            aiWorkspace.models.any { it.id == existing.modelId }
+                        if (canReuseSession) {
+                            val session = AiWorkspaceStore.enqueueSourceTask(
+                                source,
+                                task,
+                                extension,
+                                skillCapabilities = listOf(skillCapability),
+                            )
+                            controlVM.onPlayPause(false)
+                            nav.navigationAiChat(session.id, returnToPlayer = true)
+                        } else {
+                            repairAwaitingModel = PlaybackRepairRequest(task, extension, skillCapability)
+                        }
+                    }) { Text("继续") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { askAiRepairPlayList = null }) {
+                        Text(stringResource(id = R.string.cancel))
+                    }
+                },
+            )
+        }
+
+        repairAwaitingModel?.let { request ->
+            AiModelSelectionDialog(
+                models = aiWorkspace.models.filter { it.enabled },
+                onDismiss = { repairAwaitingModel = null },
+                onSelected = { model ->
+                    val session = AiWorkspaceStore.enqueueSourceTask(
+                        source,
+                        request.task,
+                        request.extension,
+                        modelId = model.id,
+                        skillCapabilities = listOf(request.skillCapability),
+                    )
+                    repairAwaitingModel = null
+                    controlVM.onPlayPause(false)
+                    nav.navigationAiChat(session.id, returnToPlayer = true)
+                },
+            )
         }
 
         val starDialog = detailedState.value.starDialogState
@@ -498,7 +593,8 @@ fun CartoonPlay(
 
     onDownload: (Triple<CartoonInfo, PlayLineWrapper, List<Episode>>) -> Unit,
     onDelete: (Triple<CartoonInfo, PlayLineWrapper, List<Episode>>) -> Unit,
-    onSave: (Triple<CartoonInfo, PlayLineWrapper, List<Episode>>) -> Unit
+    onSave: (Triple<CartoonInfo, PlayLineWrapper, List<Episode>>) -> Unit,
+    onAskAi: (repairPlayList: Boolean) -> Unit,
 ) {
     val nav = LocalNavController.current
     val isInPip by PipController.isInPip.collectAsState()
@@ -688,6 +784,7 @@ fun CartoonPlay(
                                 )
                             )
                         },
+                        onAskAi = onAskAi,
                     )
                 }
             }
@@ -703,6 +800,56 @@ fun CartoonPlay(
 
 
     }
+}
+
+private data class PlaybackRepairRequest(
+    val task: String,
+    val extension: ExtensionInfo.Installed?,
+    val skillCapability: AiSkillCapability,
+)
+
+private fun playListRepairTask(cartoon: CartoonInfo): String {
+    val lineSummary = cartoon.playLineWrapper.joinToString("；") { line ->
+        "${line.playLine.label}（${line.sortedEpisodeList.size} 集）"
+    }.ifBlank { "没有播放来源" }
+    return """
+        请修复当前 $AI_PRODUCT_NAME 番源中作品详情可打开、但播放来源或剧集列表为空的问题。
+
+        当前信息：
+        - 番源 key：${cartoon.source}
+        - 作品：${cartoon.name}
+        - 作品 ID：${cartoon.id}
+        - 原页面：${cartoon.url.ifBlank { "未知" }}
+        - 当前播放来源和剧集：$lineSummary
+
+        修复并验证后，用户会返回播放页测试。
+    """.trimIndent()
+}
+
+private fun playbackRepairTask(
+    cartoon: CartoonInfo,
+    playState: CartoonPlayViewModel.CartoonPlayState?,
+    playingState: CartoonPlayingViewModel.PlayingState,
+): String {
+    val line = playState?.playLine?.playLine
+    val episode = playState?.episode
+    val error = playingState.errorMsg.ifBlank {
+        playingState.errorThrowable?.message.orEmpty().ifBlank { "播放器无法正常加载或播放" }
+    }
+    return """
+        请修复当前 $AI_PRODUCT_NAME 番源中指定剧集无法正常播放的问题。
+
+        当前信息：
+        - 番源 key：${cartoon.source}
+        - 作品：${cartoon.name}
+        - 作品 ID：${cartoon.id}
+        - 原页面：${cartoon.url.ifBlank { "未知" }}
+        - 播放线路：${line?.label ?: "未知"}（ID：${line?.id ?: "未知"}）
+        - 剧集：${episode?.label ?: "未知"}（ID：${episode?.id ?: "未知"}，order：${episode?.order ?: -1}）
+        - 播放错误：$error
+
+        修复并验证后，用户会返回播放页测试。
+    """.trimIndent()
 }
 
 

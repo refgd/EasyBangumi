@@ -29,6 +29,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Hub
@@ -90,6 +91,7 @@ import com.heyanle.easybangumi4.plugin.js.runtime.JSRuntimeProvider
 import com.heyanle.easybangumi4.plugin.source.Debug
 import com.heyanle.inject.core.Inject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -136,7 +138,7 @@ fun AiHome() {
                                 onClick = { menuOpen = false; nav.navigate(AI_PROXIES) },
                             )
                             DropdownMenuItem(
-                                text = { Text("技能管理") },
+                                text = { Text("任务指南") },
                                 leadingIcon = { Icon(Icons.Filled.Psychology, null) },
                                 onClick = { menuOpen = false; nav.navigate(AI_SKILLS) },
                             )
@@ -321,11 +323,14 @@ private fun AddSessionDialog(
                 else -> TextButton(enabled = validTargetUrl, onClick = {
                     val host = Uri.parse(normalizedUrl).host.orEmpty().removePrefix("www.")
                     val task = newSourceTask(normalizedUrl)
+                    val taskMessage = AiMessage(role = "user", content = task)
                     onCreated(AiSession(
                         title = host.ifBlank { "新源" },
                         sourceCode = NEW_SOURCE_TEMPLATE,
                         modelId = selectedModelId,
-                        messages = listOf(AiMessage(role = "user", content = task)),
+                        skillCapabilities = listOf(AiSkillCapability.NEW_SOURCE),
+                        messages = listOf(taskMessage),
+                        activeTaskMessageId = taskMessage.id,
                         pendingAutoStart = true,
                     ))
                 }) { Text("开始创建") }
@@ -349,14 +354,17 @@ private fun normalizeTargetUrl(input: String): String {
 }
 
 private fun newSourceTask(url: String): String = """
-    请为目标网站 $url 创建一个新的 EasyBangumi 组件式 JavaScript 番源。
-
-    先使用 http_request 调查网站及其 JSON API，确认首页、分类、搜索、详情、线路、剧集、播放和弹幕能力。有稳定 JSON API 时优先使用，但必须分别抽样对比官网对应首页、分类页和搜索结果的 ID、标题、顺序与结果集合；不一致的页面必须改用官网 HTML 或页面真实接口。实现完整源码后调用 source_replace 写回会话并自动更新安装，再调用 source_validate 和 source_debug。拿到最终播放地址后调用 media_probe，确认不是短时试看且分片可访问。调试未通过就继续修复，完成后汇报结果。
+    请为目标网站 $url 创建新的 $AI_PRODUCT_NAME 组件式 JavaScript 番源，完成写回、自动安装和实际验证。
 """.trimIndent()
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AiChat(sessionId: String) {
+fun AiChat(
+    sessionId: String,
+    returnToPlayer: Boolean = false,
+    returnToHome: Boolean = false,
+    returnToSearch: Boolean = false,
+) {
     val nav = LocalNavController.current
     val workspace by AiWorkspaceStore.state.collectAsState()
     val extensionController: ExtensionController by Inject.injectLazy()
@@ -409,8 +417,10 @@ fun AiChat(sessionId: String) {
                     consumePendingPrompts = {
                         withContext(Dispatchers.Main.immediate) {
                             val queued = pendingPrompts
-                            pendingPrompts = emptyList()
-                            queued
+                            val current = AiWorkspaceStore.session(session.id) ?: session
+                            val (currentTask, nextTask) = queued.partition(current::canConsumePendingPrompt)
+                            pendingPrompts = nextTask
+                            currentTask
                         }
                     },
                 )
@@ -420,20 +430,19 @@ fun AiChat(sessionId: String) {
                     runEvents = runEvents.filterNot { it.kind == "reasoning" }
                 }
                 if (result.isFailure) {
-                    Log.e("EasyBangumiAiChat", "AI request failed", result.exceptionOrNull())
+                    Log.e("AiChat", "AI request failed", result.exceptionOrNull())
                     val current = AiWorkspaceStore.session(session.id) ?: session
-                    AiWorkspaceStore.saveSession(
-                        current.copy(messages = current.messages + AiMessage(role = "assistant", content = "请求失败: $status"))
+                    val failed = current.copy(
+                        messages = current.messages + AiMessage(role = "assistant", content = "请求失败: $status")
                     )
+                    AiWorkspaceStore.saveSession(failed)
                     persistReasoningSummary(session.id, runEvents)
                     runEvents = runEvents.filterNot { it.kind == "reasoning" }
                     val queued = pendingPrompts
                     if (queued.isNotEmpty()) {
                         pendingPrompts = emptyList()
-                        val failedSession = AiWorkspaceStore.session(session.id) ?: current
-                        AiWorkspaceStore.saveSession(
-                            failedSession.copy(messages = failedSession.messages + queued.map { AiMessage(role = "user", content = it) })
-                        )
+                        val failedSession = AiWorkspaceStore.session(session.id) ?: failed
+                        AiWorkspaceStore.saveSession(failedSession.appendDirectUserPrompts(queued))
                     }
                     break
                 }
@@ -442,24 +451,41 @@ fun AiChat(sessionId: String) {
                 if (queued.isEmpty()) break
                 pendingPrompts = emptyList()
                 val current = AiWorkspaceStore.session(session.id) ?: session
-                AiWorkspaceStore.saveSession(
-                    current.copy(messages = current.messages + queued.map { AiMessage(role = "user", content = it) })
-                )
+                AiWorkspaceStore.saveSession(current.appendDirectUserPrompts(queued))
                 status = "正在处理 ${queued.size} 条追加消息..."
                 runEvents = (runEvents + AiAgentEvent("status", "追加消息", status)).takeLast(80)
             }
         } finally {
+            val queued = pendingPrompts
+            if (queued.isNotEmpty()) {
+                pendingPrompts = emptyList()
+                val current = AiWorkspaceStore.session(session.id) ?: session
+                AiWorkspaceStore.saveSession(current.appendDirectUserPrompts(queued))
+            }
             sending = false
             agentJob = null
         }
     }
 
-    LaunchedEffect(session.messages.size, sending, tab, pendingPrompts.size, runEvents.size) {
+    val showReturnAction = (returnToPlayer || returnToHome || returnToSearch) && !sending &&
+        session.messages.lastOrNull()?.role == "assistant"
+
+    val autoScrollRevision = listOf(
+        session.messages.lastOrNull()?.id,
+        session.messages.lastOrNull()?.content?.hashCode(),
+        pendingPrompts.lastOrNull()?.hashCode(),
+        runEvents.lastOrNull()?.text?.hashCode(),
+        showReturnAction,
+    )
+    LaunchedEffect(autoScrollRevision, sending, tab) {
         if (tab != 0) return@LaunchedEffect
         val extraItems = (if (pendingPrompts.isNotEmpty()) 1 else 0) +
-            (if (runEvents.any { it.kind == "reasoning" || it.kind == "tool" }) 1 else 0)
+            (if (runEvents.any { it.kind == "reasoning" || it.kind == "tool" }) 1 else 0) +
+            (if (showReturnAction) 1 else 0)
         val lastIndex = session.messages.size + extraItems - 1
-        if (lastIndex >= 0) chatListState.scrollToItem(lastIndex)
+        if (lastIndex >= 0) {
+            chatListState.scrollToItem(lastIndex, Int.MAX_VALUE)
+        }
     }
 
     LaunchedEffect(sending) {
@@ -491,7 +517,7 @@ fun AiChat(sessionId: String) {
                 Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("对话") })
                 Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("源码") })
             }
-            SessionSelectors(session, workspace)
+            SessionModelSelector(session, workspace)
             if (tab == 0) {
                 val hasRunTimeline = sending || runEvents.isNotEmpty()
                 val historicalMessages = if (hasRunTimeline) {
@@ -526,6 +552,24 @@ fun AiChat(sessionId: String) {
                             }
                         }
                     }
+                    if (showReturnAction) item(key = "return-to-previous") {
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.Start,
+                        ) {
+                            OutlinedButton(onClick = nav::popBackStack) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    when {
+                                        returnToHome -> "返回首页重试"
+                                        returnToSearch -> "返回搜索页重试"
+                                        else -> "返回播放页测试"
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
                 Column(Modifier.fillMaxWidth().imePadding()) {
                     if (sending) {
@@ -538,9 +582,7 @@ fun AiChat(sessionId: String) {
                                 pendingPrompts = emptyList()
                                 if (queued.isNotEmpty()) {
                                     val current = AiWorkspaceStore.session(session.id) ?: session
-                                    AiWorkspaceStore.saveSession(
-                                        current.copy(messages = current.messages + queued.map { AiMessage(role = "user", content = it) })
-                                    )
+                                    AiWorkspaceStore.saveSession(current.appendDirectUserPrompts(queued))
                                 }
                                 status = "任务已停止"
                                 agentJob?.cancel()
@@ -570,9 +612,7 @@ fun AiChat(sessionId: String) {
                                     status = "已追加 ${pendingPrompts.size} 条消息，将在当前响应后继续"
                                 } else {
                                     val current = AiWorkspaceStore.session(session.id) ?: session
-                                    AiWorkspaceStore.saveSession(
-                                        current.copy(messages = current.messages + AiMessage(role = "user", content = prompt))
-                                    )
+                                    AiWorkspaceStore.saveSession(current.appendDirectUserPrompt(prompt))
                                     agentJob = scope.launch {
                                         runAgent("正在发送请求...")
                                     }
@@ -597,30 +637,38 @@ fun AiChat(sessionId: String) {
                         AiWorkspaceStore.saveSession(session.copy(sourceCode = code))
                         scope.launch {
                             status = withContext(Dispatchers.IO) {
-                                when (val loaded = JSExtensionInnerLoader(code, JSRuntimeProvider(1), false).load()) {
-                                    is ExtensionInfo.InstallError -> "源码已保存，但安装前校验失败：${loaded.errMsg}"
-                                    is ExtensionInfo.Installed -> {
-                                        val error = if (loaded.key.matches(Regex("[A-Za-z0-9._-]+"))) {
-                                            extensionController.appendJsExtensionSource(
-                                                "${loaded.key}.ebg.js",
-                                                loaded.key,
-                                                code,
-                                            )
-                                        } else {
-                                            IllegalArgumentException("key 只能包含字母、数字、点、下划线和连字符")
-                                        }
-                                        if (error == null) {
-                                            val current = AiWorkspaceStore.session(session.id) ?: session.copy(sourceCode = code)
-                                            AiWorkspaceStore.saveSession(current.copy(
-                                                title = loaded.label.ifBlank { current.title },
-                                                sourceKey = loaded.key,
-                                                sourceVersionName = loaded.versionName,
-                                            ))
-                                            "源码已保存并安装到番源管理"
-                                        } else {
-                                            "源码已保存，但自动安装失败：${error.message ?: error.javaClass.simpleName}"
+                                val runtime = JSRuntimeProvider(1)
+                                try {
+                                    when (val loaded = JSExtensionInnerLoader(code, runtime, false).load()) {
+                                        is ExtensionInfo.InstallError -> "源码已保存，但安装前校验失败：${loaded.errMsg}"
+                                        is ExtensionInfo.Installed -> {
+                                            val contractError = runCatching {
+                                                validateSourceAssembly(loaded, requireBaseUrl = true)
+                                            }.exceptionOrNull()
+                                            val error = contractError ?: if (loaded.key.matches(Regex("[A-Za-z0-9._-]+"))) {
+                                                extensionController.appendJsExtensionSource(
+                                                    "${loaded.key}.ebg.js",
+                                                    loaded.key,
+                                                    code,
+                                                )
+                                            } else {
+                                                IllegalArgumentException("key 只能包含字母、数字、点、下划线和连字符")
+                                            }
+                                            if (error == null) {
+                                                val current = AiWorkspaceStore.session(session.id) ?: session.copy(sourceCode = code)
+                                                AiWorkspaceStore.saveSession(current.copy(
+                                                    title = loaded.label.ifBlank { current.title },
+                                                    sourceKey = loaded.key,
+                                                    sourceVersionName = loaded.versionName,
+                                                ))
+                                                "源码已保存并安装到番源管理"
+                                            } else {
+                                                "源码已保存，但自动安装失败：${error.message ?: error.javaClass.simpleName}"
+                                            }
                                         }
                                     }
+                                } finally {
+                                    runtime.release()
                                 }
                             }
                         }
@@ -728,12 +776,22 @@ private fun parseAgentRound(status: String): Int? =
 private fun formatElapsed(seconds: Int): String = "%02d:%02d".format(seconds / 60, seconds % 60)
 
 private fun persistReasoningSummary(sessionId: String, events: List<AiAgentEvent>) {
-    val summary = events.asSequence()
+    val compact = mutableListOf<String>()
+    events.asSequence()
         .filter { it.kind == "reasoning" }
         .map { it.text.trim() }
         .filter { it.isNotEmpty() }
         .distinct()
-        .joinToString("\n\n")
+        .forEach { text ->
+            val previous = compact.lastOrNull()
+            when {
+                previous == null -> compact += text
+                text.startsWith(previous) -> compact[compact.lastIndex] = text
+                previous.startsWith(text) -> Unit
+                else -> compact += text
+            }
+        }
+    val summary = compact.takeLast(6).joinToString("\n\n").takeLast(MAX_REASONING_SUMMARY_CHARS)
     if (summary.isBlank()) return
     val session = AiWorkspaceStore.session(sessionId) ?: return
     val finalAnswerIndex = session.messages.indexOfLast { it.role == "assistant" }
@@ -752,6 +810,7 @@ private fun SourceValidationDialog(
     onDismiss: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val validationRuntime = remember(code) { JSRuntimeProvider(1) }
     var busy by remember { mutableStateOf(true) }
     var logs by remember { mutableStateOf(listOf(ValidationLog(1, "正在加载并校验插件..."))) }
     var selection by remember { mutableStateOf<Debug.Event?>(null) }
@@ -814,14 +873,16 @@ private fun SourceValidationDialog(
         if (logs.isNotEmpty()) logListState.scrollToItem(logs.lastIndex)
     }
 
-    LaunchedEffect(code, callback) {
-        val loaded = runCatching {
+    LaunchedEffect(code, callback, validationRuntime) {
+        val loaded = try {
             withContext(Dispatchers.IO) {
-                JSExtensionInnerLoader(code, JSRuntimeProvider(1), false).load()
+                JSExtensionInnerLoader(code, validationRuntime, false).load()
             }
-        }.getOrElse {
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
             busy = false
-            appendLog(-1, it.stackTraceToString().take(MAX_VALIDATION_LOG_CHARS))
+            appendLog(-1, error.stackTraceToString().take(MAX_VALIDATION_LOG_CHARS))
             return@LaunchedEffect
         }
         when (loaded) {
@@ -849,9 +910,10 @@ private fun SourceValidationDialog(
         }
     }
 
-    DisposableEffect(callback) {
+    DisposableEffect(callback, validationRuntime) {
         onDispose {
             if (Debug.callback === callback) Debug.cancelDebug(true)
+            validationRuntime.release()
         }
     }
 
@@ -945,12 +1007,13 @@ private fun SourceValidationDialog(
 }
 
 private const val MAX_VALIDATION_LOG_CHARS = 12_000
+private const val MAX_REASONING_SUMMARY_CHARS = 8_000
 
 @Composable
-private fun SessionSelectors(session: AiSession, workspace: AiWorkspaceData) {
+private fun SessionModelSelector(session: AiSession, workspace: AiWorkspaceData) {
     var modelMenu by remember { mutableStateOf(false) }
     val model = workspace.models.firstOrNull { it.id == session.modelId }
-    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
         Box(Modifier.fillMaxWidth()) {
             OutlinedButton(onClick = { modelMenu = true }, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Filled.Memory, null); Spacer(Modifier.width(6.dp)); Text(model?.name ?: "选择模型", maxLines = 1)
@@ -1203,17 +1266,40 @@ private fun ProxyDialog(proxy: AiProxyConfig?, onDismiss: () -> Unit, onSave: (A
 fun AiSkills() {
     val workspace by AiWorkspaceStore.state.collectAsState()
     var editing by remember { mutableStateOf<AiSkill?>(null) }
+    var viewing by remember { mutableStateOf<AiSkill?>(null) }
+    var deleting by remember { mutableStateOf<AiSkill?>(null) }
     var adding by remember { mutableStateOf(false) }
-    ManagementScaffold("技能管理", onAdd = { adding = true }) {
+    fun copyForEditing(skill: AiSkill) {
+        viewing = null
+        editing = skill.copy(
+            id = UUID.randomUUID().toString(),
+            name = "${skill.name} 副本",
+            enabled = false,
+            builtIn = false,
+        )
+    }
+    ManagementScaffold("任务指南", onAdd = { adding = true }) {
         items(workspace.skills, key = { it.id }) { skill ->
             ListItem(
-                modifier = Modifier.clickable { editing = skill },
+                modifier = Modifier.clickable {
+                    if (skill.builtIn) viewing = skill else editing = skill
+                },
                 headlineContent = { Text(skill.name) },
-                supportingContent = { Text(if (skill.builtIn) "内置，可修改" else "自定义技能") },
+                supportingContent = {
+                    Text("${if (skill.builtIn) "内置，只读，可复制" else "自定义指南"} · ${skill.capability.label}")
+                },
                 leadingContent = { Icon(Icons.Filled.Psychology, null) },
                 trailingContent = { Row(verticalAlignment = Alignment.CenterVertically) {
                     Switch(checked = skill.enabled, onCheckedChange = { AiWorkspaceStore.saveSkill(skill.copy(enabled = it)) })
-                    if (!skill.builtIn) IconButton(onClick = { AiWorkspaceStore.deleteSkill(skill.id) }) { Icon(Icons.Filled.Delete, "删除") }
+                    if (skill.builtIn) {
+                        IconButton(onClick = { copyForEditing(skill) }) {
+                            Icon(Icons.Filled.ContentCopy, "复制为自定义指南")
+                        }
+                    } else {
+                        IconButton(onClick = { deleting = skill }) {
+                            Icon(Icons.Filled.Delete, "删除")
+                        }
+                    }
                 } },
             )
             HorizontalDivider()
@@ -1222,24 +1308,118 @@ fun AiSkills() {
     if (adding || editing != null) SkillDialog(editing, { adding = false; editing = null }) {
         AiWorkspaceStore.saveSkill(it); adding = false; editing = null
     }
+    viewing?.let { skill ->
+        BuiltInSkillDialog(
+            skill = skill,
+            onDismiss = { viewing = null },
+            onCopy = { copyForEditing(skill) },
+        )
+    }
+    deleting?.let { skill ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text("删除自定义指南？") },
+            text = { Text("将删除“${skill.name}”，此操作无法撤销。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    AiWorkspaceStore.deleteSkill(skill.id)
+                    deleting = null
+                }) { Text("删除") }
+            },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text("取消") } },
+        )
+    }
 }
 
 @Composable
 private fun SkillDialog(skill: AiSkill?, onDismiss: () -> Unit, onSave: (AiSkill) -> Unit) {
     var name by remember { mutableStateOf(skill?.name.orEmpty()) }
     var prompt by remember { mutableStateOf(skill?.prompt.orEmpty()) }
+    var capability by remember { mutableStateOf(skill?.capability ?: AiSkillCapability.BASE) }
+    var capabilityMenu by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (skill == null) "添加技能" else "编辑技能") },
-        text = { Column {
+        title = { Text(if (skill == null) "添加任务指南" else "编辑任务指南") },
+        text = { Column(
+            Modifier.fillMaxWidth().heightIn(max = 560.dp).verticalScroll(rememberScrollState())
+        ) {
             OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("名称") }, singleLine = true)
             Spacer(Modifier.height(8.dp))
-            OutlinedTextField(prompt, { prompt = it }, Modifier.fillMaxWidth().height(360.dp), label = { Text("系统指令") })
+            Box(Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = { capabilityMenu = true }, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Filled.Psychology, null)
+                    Spacer(Modifier.width(6.dp))
+                    Text(capability.label)
+                }
+                DropdownMenu(expanded = capabilityMenu, onDismissRequest = { capabilityMenu = false }) {
+                    AiSkillCapability.entries.forEach { value ->
+                        DropdownMenuItem(
+                            text = { Text(value.label) },
+                            leadingIcon = { if (value == capability) Icon(Icons.Filled.Check, null) },
+                            onClick = { capability = value; capabilityMenu = false },
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(prompt, { prompt = it }, Modifier.fillMaxWidth().height(320.dp), label = { Text("系统指令") })
         } },
         confirmButton = { TextButton(enabled = name.isNotBlank() && prompt.isNotBlank(), onClick = {
-            onSave(AiSkill(skill?.id ?: UUID.randomUUID().toString(), name.trim(), prompt.trim(), skill?.enabled ?: true, skill?.builtIn ?: false))
+            onSave(AiSkill(
+                id = skill?.id ?: UUID.randomUUID().toString(),
+                name = name.trim(),
+                prompt = prompt.trim(),
+                enabled = skill?.enabled ?: true,
+                builtIn = false,
+                capability = capability,
+            ))
         }) { Text("保存") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+    )
+}
+
+@Composable
+private fun BuiltInSkillDialog(skill: AiSkill, onDismiss: () -> Unit, onCopy: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("查看内置任务指南") },
+        text = { Column(
+            Modifier.fillMaxWidth().heightIn(max = 560.dp).verticalScroll(rememberScrollState())
+        ) {
+            OutlinedTextField(
+                value = skill.name,
+                onValueChange = {},
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("名称") },
+                singleLine = true,
+                readOnly = true,
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = skill.capability.label,
+                onValueChange = {},
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("适用任务") },
+                singleLine = true,
+                readOnly = true,
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = skill.prompt,
+                onValueChange = {},
+                modifier = Modifier.fillMaxWidth().height(320.dp),
+                label = { Text("系统指令") },
+                readOnly = true,
+            )
+        } },
+        confirmButton = {
+            TextButton(onClick = onCopy) {
+                Icon(Icons.Filled.ContentCopy, null)
+                Spacer(Modifier.width(6.dp))
+                Text("复制为自定义指南")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("关闭") } },
     )
 }
 
@@ -1263,6 +1443,23 @@ private val NEW_SOURCE_TEMPLATE = """
     // @versionCode 1
     // @libVersion 11
     // @hasSearch true
+
+    var preferenceHelper = Inject_PreferenceHelper;
+    var DEFAULT_BASE_URL = "https://example.com";
+
+    function PreferenceComponent_getPreference() {
+        var result = new ArrayList();
+        result.add(new SourcePreference.Edit("站点地址", "BaseUrl", DEFAULT_BASE_URL));
+        return result;
+    }
+
+    function getBaseUrl() {
+        var value = new String(preferenceHelper.get("BaseUrl", DEFAULT_BASE_URL)).trim();
+        while (value.length > 0 && value.substring(value.length - 1) == "/") {
+            value = value.substring(0, value.length - 1);
+        }
+        return value || DEFAULT_BASE_URL;
+    }
 
     function PageComponent_getMainTabs() {
         var result = new ArrayList();

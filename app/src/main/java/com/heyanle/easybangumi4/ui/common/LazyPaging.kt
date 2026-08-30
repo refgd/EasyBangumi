@@ -9,14 +9,15 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridScope
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
 import com.heyanle.easy_i18n.R
 import com.heyanle.easybangumi4.utils.stringRes
+import com.heyanle.easybangumi4.ui.common.page.SourcePageErrorActions
+import com.heyanle.easybangumi4.ui.common.page.SourcePageEmptyActions
+import com.heyanle.easybangumi4.ui.common.page.LocalSourcePageEmptyHandler
 
 /**
  * Created by HeYanLe on 2023/3/1 15:41.
@@ -52,13 +53,11 @@ fun <T : Any> LazyGridScope.pagingCommon(items: LazyPagingItems<T>, isShowLoadin
                     )
                 ErrorPage(modifier = Modifier.fillMaxWidth(),
                     errorMsg = errorMsg,
-                    clickEnable = true,
+                    clickEnable = false,
                     other = {
-                        Text(text = stringResource(id = R.string.click_to_retry))
+                        SourcePageErrorActions(errorMsg, items::retry)
                     },
-                    onClick = {
-                        items.retry()
-                    })
+                )
             }
         }
 
@@ -96,13 +95,11 @@ fun <T : Any> LazyStaggeredGridScope.pagingCommon(
                     )
                 ErrorPage(modifier = Modifier.fillMaxWidth(),
                     errorMsg = errorMsg,
-                    clickEnable = true,
+                    clickEnable = false,
                     other = {
-                        Text(text = stringResource(id = R.string.click_to_retry))
+                        SourcePageErrorActions(errorMsg, items::retry)
                     },
-                    onClick = {
-                        items.retry()
-                    })
+                )
             }
         }
 
@@ -127,6 +124,12 @@ fun <T : Any> PagingCommon(items: LazyPagingItems<T>, isShowLoading: Boolean = t
             headerWhenErrorEmpty?.invoke(this)
             EmptyPage(
                 modifier = Modifier.fillMaxWidth().weight(1f),
+                emptyMsg = if (LocalSourcePageEmptyHandler.current != null) {
+                    LocalSourcePageEmptyHandler.current?.emptyMsg.orEmpty()
+                } else {
+                    stringRes(R.string.is_empty)
+                },
+                other = { SourcePageEmptyActions() },
             )
         }
 
@@ -153,13 +156,11 @@ fun <T : Any> PagingCommon(items: LazyPagingItems<T>, isShowLoading: Boolean = t
                 headerWhenErrorEmpty?.invoke(this)
                 ErrorPage(modifier = Modifier.fillMaxWidth().weight(1f),
                     errorMsg = errorMsg,
-                    clickEnable = true,
+                    clickEnable = false,
                     other = {
-                        Text(text = stringResource(id = R.string.click_to_retry))
+                        SourcePageErrorActions(errorMsg, items::refresh)
                     },
-                    onClick = {
-                        items.refresh()
-                    })
+                )
             }
 
         }
@@ -190,13 +191,11 @@ fun <T : Any> LazyListScope.pagingCommon(items: LazyPagingItems<T>, isShowLoadin
                     )
                 ErrorPage(modifier = Modifier.fillMaxWidth(),
                     errorMsg = errorMsg,
-                    clickEnable = true,
+                    clickEnable = false,
                     other = {
-                        Text(text = stringResource(id = R.string.click_to_retry))
+                        SourcePageErrorActions(errorMsg, items::retry)
                     },
-                    onClick = {
-                        items.retry()
-                    })
+                )
             }
         }
 
@@ -225,13 +224,11 @@ fun <T : Any> LazyListScope.pagingCommonHor(items: LazyPagingItems<T>, isShowLoa
                     )
                 ErrorPage(modifier = Modifier.fillMaxHeight(),
                     errorMsg = errorMsg,
-                    clickEnable = true,
+                    clickEnable = false,
                     other = {
-                        Text(text = stringResource(id = R.string.click_to_retry))
+                        SourcePageErrorActions(errorMsg, items::retry)
                     },
-                    onClick = {
-                        items.retry()
-                    })
+                )
             }
         }
 

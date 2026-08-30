@@ -37,9 +37,7 @@ class JSExtensionCryLoader(
     override val key: String
         get() = "js:${file.path}"
 
-    override fun load(): ExtensionInfo? = synchronized(
-        decryptLocks.computeIfAbsent(file.absolutePath) { Any() }
-    ) {
+    override fun load(): ExtensionInfo? = synchronized(decryptLock(file.absolutePath)) {
         File(plaintextCacheFolder).mkdirs()
 
 
@@ -87,9 +85,13 @@ class JSExtensionCryLoader(
                 is ExtensionInfo.Installed -> {
                     it.copy(sourcePath = file.absolutePath)
                 }
-                else -> null
             }
         }
+    }
+
+    private fun decryptLock(path: String): Any {
+        val candidate = Any()
+        return decryptLocks.putIfAbsent(path, candidate) ?: candidate
     }
 
     override fun canLoad(): Boolean {

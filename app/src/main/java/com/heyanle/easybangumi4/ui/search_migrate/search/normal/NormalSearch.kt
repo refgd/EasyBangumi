@@ -33,6 +33,7 @@ import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -65,6 +66,10 @@ import com.heyanle.easybangumi4.ui.common.PagingCommon
 import com.heyanle.easybangumi4.ui.common.TabIndicator
 import com.heyanle.easybangumi4.ui.common.cover_star.CoverStarViewModel
 import com.heyanle.easybangumi4.ui.common.pagingCommon
+import com.heyanle.easybangumi4.ui.common.page.LocalSourcePageEmptyHandler
+import com.heyanle.easybangumi4.ui.common.page.LocalSourcePageErrorHandler
+import com.heyanle.easybangumi4.ui.common.page.SourcePageEmptyAction
+import com.heyanle.easybangumi4.ui.search_migrate.search.SearchRepairIssue
 import com.heyanle.easybangumi4.ui.search_migrate.search.SearchViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -77,6 +82,7 @@ import kotlinx.coroutines.launch
 fun ColumnScope.NormalSearch(
     defSourceKey: String,
     searchViewModel: SearchViewModel,
+    onAskAi: (SearchRepairIssue) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val sourceInfos = LocalSourceBundleController.current.searchAbles()
@@ -138,8 +144,10 @@ fun ColumnScope.NormalSearch(
             )
             NormalSearchPage(
                 isShow = it == pagerState.currentPage,
+                sourceInfo = sourceInfo,
                 searchViewModel = searchViewModel,
-                normalSearchViewModel = normalSearchViewModel
+                normalSearchViewModel = normalSearchViewModel,
+                onAskAi = onAskAi,
             )
         }
     }
@@ -149,8 +157,10 @@ fun ColumnScope.NormalSearch(
 @Composable
 fun NormalSearchPage(
     isShow: Boolean,
+    sourceInfo: com.heyanle.easybangumi4.plugin.source.SourceInfo.Loaded,
     searchViewModel: SearchViewModel,
-    normalSearchViewModel: NormalSearchViewModel
+    normalSearchViewModel: NormalSearchViewModel,
+    onAskAi: (SearchRepairIssue) -> Unit,
 ) {
 
     val keyboard = LocalSoftwareKeyboardController.current
@@ -187,6 +197,26 @@ fun NormalSearchPage(
     val haptic = LocalHapticFeedback.current
 
     if (page != null) {
+        val source = sourceInfo.source
+        val issue: (String, Boolean) -> SearchRepairIssue = { message, empty ->
+            SearchRepairIssue(
+                sourceKey = source.key,
+                sourceLabel = source.label,
+                keyword = realSearchKey,
+                errorMsg = message,
+                emptyResult = empty,
+            )
+        }
+        CompositionLocalProvider(
+            LocalSourcePageErrorHandler provides { error -> onAskAi(issue(error, false)) },
+            LocalSourcePageEmptyHandler provides SourcePageEmptyAction(
+                emptyMsg = "没有搜索结果，换个关键词试试",
+                buttonText = "这个关键词应该有结果？使用 AI 修复",
+                onClick = {
+                    onAskAi(issue("搜索成功但返回空列表，用户确认该关键词应当有结果", true))
+                },
+            ),
+        ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -240,6 +270,7 @@ fun NormalSearchPage(
             )
             FastScrollToTopFab(listState = lazyListState, after = 10)
 
+        }
         }
     }
 }

@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SyncAlt
 import androidx.compose.material3.Divider
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -28,6 +29,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
@@ -40,6 +42,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -48,14 +51,26 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.heyanle.easybangumi4.LocalNavController
+import com.heyanle.easybangumi4.navigationAiChat
 import com.heyanle.easybangumi4.navigationSearch
+import com.heyanle.easybangumi4.plugin.extension.ExtensionController
+import com.heyanle.easybangumi4.plugin.extension.ExtensionInfo
 import com.heyanle.easybangumi4.plugin.js.source.getIconWithAsyncOrDrawable
 import com.heyanle.easybangumi4.plugin.source.LocalSourceBundleController
 import com.heyanle.easybangumi4.ui.common.ErrorPage
 import com.heyanle.easybangumi4.ui.common.OkImage
 import com.heyanle.easybangumi4.ui.common.page.CartoonPageListTab
 import com.heyanle.easybangumi4.ui.common.page.CartoonPageUI
+import com.heyanle.easybangumi4.ui.common.page.LocalSourcePageErrorHandler
+import com.heyanle.easybangumi4.ui.common.page.LocalSourcePageEmptyHandler
+import com.heyanle.easybangumi4.ui.common.page.SourcePageEmptyAction
+import com.heyanle.easybangumi4.ui.common.page.SourcePageErrorActions
+import com.heyanle.easybangumi4.ui.ai.AiWorkspaceStore
+import com.heyanle.easybangumi4.ui.ai.AiModelSelectionDialog
+import com.heyanle.easybangumi4.ui.ai.AI_PRODUCT_NAME
+import com.heyanle.easybangumi4.ui.ai.AiSkillCapability
 import com.heyanle.easybangumi4.ui.main.MainViewModel
+import com.heyanle.inject.core.Inject
 import kotlinx.coroutines.launch
 
 /**
@@ -71,6 +86,11 @@ fun Home() {
     val nav = LocalNavController.current
 
     val state by vm.stateFlow.collectAsState()
+    val extensionController: ExtensionController by Inject.injectLazy()
+    val extensionState by extensionController.state.collectAsState()
+    val aiWorkspace by AiWorkspaceStore.state.collectAsState()
+    var repairErrorToConfirm by remember { mutableStateOf<String?>(null) }
+    var repairAwaitingModel by remember { mutableStateOf<HomeRepairRequest?>(null) }
 
     val scope = rememberCoroutineScope()
 
@@ -107,6 +127,23 @@ fun Home() {
 
     }
 
+    fun askAiToRepair(errorMsg: String) {
+        repairErrorToConfirm = errorMsg
+    }
+
+    CompositionLocalProvider(
+        LocalSourcePageErrorHandler provides ::askAiToRepair,
+        LocalSourcePageEmptyHandler provides SourcePageEmptyAction(
+            emptyMsg = "当前栏目没有影视内容",
+            buttonText = "列表不应为空？使用 AI 修复",
+            onClick = {
+                val pageLabel = state.pages.getOrNull(state.selectionIndex)?.label.orEmpty()
+                askAiToRepair(
+                    "首页栏目“${pageLabel.ifBlank { "当前栏目" }}”成功加载但返回空列表，用户确认该栏目正常应有影视内容"
+                )
+            },
+        ),
+    ) {
     Column {
         HomeTopAppBar(
             scrollBehavior = scrollBehavior,
@@ -136,7 +173,10 @@ fun Home() {
                 modifier = Modifier
                     .fillMaxSize(),
                 errorMsg = state.errMsg,
-                clickEnable = false
+                clickEnable = false,
+                other = {
+                    SourcePageErrorActions(state.errMsg, vm::retry)
+                },
             )
         }else{
             AnimatedContent(
@@ -167,10 +207,85 @@ fun Home() {
             }
         }
     }
+    }
+
+    repairErrorToConfirm?.let { errorMsg ->
+        AlertDialog(
+            onDismissRequest = { repairErrorToConfirm = null },
+            title = { Text("使用 AI 修复首页？") },
+            text = {
+                Text("将把当前番源、首页栏目和加载错误发送到对应的 AI 会话，并自动开始排查。")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val sourceKey = state.selectionKey
+                    val extension = extensionState.extensionInfoMap.values
+                        .filterIsInstance<ExtensionInfo.Installed>()
+                        .firstOrNull { info -> info.sources.any { it.key == sourceKey } }
+                    val request = HomeRepairRequest(
+                        sourceKey = sourceKey,
+                        extension = extension,
+                        task = homePageRepairTask(
+                            sourceKey = sourceKey,
+                            sourceLabel = state.topAppBarTitle,
+                            pageLabel = state.pages.getOrNull(state.selectionIndex)?.label.orEmpty(),
+                            errorMsg = errorMsg,
+                        ),
+                    )
+                    repairErrorToConfirm = null
+                    val existing = AiWorkspaceStore.sourceSession(sourceKey, extension)
+                    val canReuseSession = existing != null &&
+                        aiWorkspace.models.any { it.id == existing.modelId }
+                    if (canReuseSession) {
+                        val session = AiWorkspaceStore.enqueueSourceTask(
+                            sourceKey,
+                            request.task,
+                            extension,
+                            skillCapabilities = listOf(AiSkillCapability.CATALOG),
+                        )
+                        nav.navigationAiChat(session.id, returnToHome = true)
+                    } else {
+                        repairAwaitingModel = request
+                    }
+                }) {
+                    Text("继续")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { repairErrorToConfirm = null }) {
+                    Text("取消")
+                }
+            },
+        )
+    }
+
+    repairAwaitingModel?.let { request ->
+        AiModelSelectionDialog(
+            models = aiWorkspace.models.filter { it.enabled },
+            onDismiss = { repairAwaitingModel = null },
+            onSelected = { model ->
+                val session = AiWorkspaceStore.enqueueSourceTask(
+                    request.sourceKey,
+                    request.task,
+                    request.extension,
+                    modelId = model.id,
+                    skillCapabilities = listOf(AiSkillCapability.CATALOG),
+                )
+                repairAwaitingModel = null
+                nav.navigationAiChat(session.id, returnToHome = true)
+            },
+        )
+    }
 //    HomeBottomSheet(sheetState = sheetState, defSourceKey = state.selectionKey, onSourceClick = {
 //        vm.changeSelectionSource(it)
 //    })
 }
+
+private data class HomeRepairRequest(
+    val sourceKey: String,
+    val task: String,
+    val extension: ExtensionInfo.Installed?,
+)
 
 @Composable
 fun HomeBottomSheet(
@@ -260,3 +375,20 @@ fun HomeTopAppBar(
         }
     )
 }
+
+private fun homePageRepairTask(
+    sourceKey: String,
+    sourceLabel: String,
+    pageLabel: String,
+    errorMsg: String,
+): String = """
+    请修复当前 $AI_PRODUCT_NAME 番源的首页栏目或影视列表问题。
+
+    当前信息：
+    - 番源：${sourceLabel.ifBlank { sourceKey }}
+    - 番源 key：$sourceKey
+    - 首页栏目：${pageLabel.ifBlank { "获取首页栏目阶段" }}
+    - 加载错误：${errorMsg.ifBlank { "首页列表加载失败" }}
+
+    修复并验证后，用户会返回首页重试。
+""".trimIndent()

@@ -26,12 +26,14 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
@@ -55,9 +57,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.heyanle.easy_i18n.R
 import com.heyanle.easybangumi4.LocalNavController
+import com.heyanle.easybangumi4.navigationAiChat
+import com.heyanle.easybangumi4.plugin.extension.ExtensionController
+import com.heyanle.easybangumi4.plugin.extension.ExtensionInfo
+import com.heyanle.easybangumi4.ui.ai.AiModelSelectionDialog
+import com.heyanle.easybangumi4.ui.ai.AiWorkspaceStore
+import com.heyanle.easybangumi4.ui.ai.AI_PRODUCT_NAME
+import com.heyanle.easybangumi4.ui.ai.AiSkillCapability
 import com.heyanle.easybangumi4.ui.common.EmptyPage
 import com.heyanle.easybangumi4.ui.search_migrate.search.gather.GatherSearch
 import com.heyanle.easybangumi4.ui.search_migrate.search.normal.NormalSearch
+import com.heyanle.inject.core.Inject
 
 /**
  * Created by heyanlin on 2023/12/18.
@@ -77,6 +87,11 @@ fun Search(
 
     val searchEvent = searchVM.searchFlow.collectAsState()
     val searchHistory = searchVM.searchHistory.collectAsState(initial = emptyList())
+    val extensionController: ExtensionController by Inject.injectLazy()
+    val extensionState by extensionController.state.collectAsState()
+    val aiWorkspace by AiWorkspaceStore.state.collectAsState()
+    var repairToConfirm by remember { mutableStateOf<SearchRepairIssue?>(null) }
+    var repairAwaitingModel by remember { mutableStateOf<PendingSearchRepair?>(null) }
 
     Column(
         modifier = Modifier.fillMaxWidth()
@@ -117,13 +132,113 @@ fun Search(
             )
         }else if (searchVM.isGather.value){
             // 聚合搜索
-            GatherSearch(searchViewModel = searchVM)
+            GatherSearch(searchViewModel = searchVM, onAskAi = { repairToConfirm = it })
         }else{
             // 普通搜素
-            NormalSearch(defSourceKey = defSourceKey, searchViewModel = searchVM)
+            NormalSearch(
+                defSourceKey = defSourceKey,
+                searchViewModel = searchVM,
+                onAskAi = { repairToConfirm = it },
+            )
         }
     }
+
+    repairToConfirm?.let { issue ->
+        AlertDialog(
+            onDismissRequest = { repairToConfirm = null },
+            title = {
+                Text(if (issue.emptyResult) "使用 AI 修复空结果？" else "使用 AI 修复搜索？")
+            },
+            text = {
+                Text(
+                    if (issue.emptyResult) {
+                        "如果你确认“${issue.keyword}”在 ${issue.sourceLabel} 应该能搜到内容，AI 将检查该源的搜索接口和解析逻辑。"
+                    } else {
+                        "将把当前番源、搜索词和加载错误发送到对应的 AI 会话，并自动开始排查。"
+                    }
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val extension = extensionState.extensionInfoMap.values
+                        .filterIsInstance<ExtensionInfo.Installed>()
+                        .firstOrNull { info -> info.sources.any { it.key == issue.sourceKey } }
+                    val request = PendingSearchRepair(
+                        issue = issue,
+                        extension = extension,
+                        task = searchRepairTask(issue),
+                    )
+                    repairToConfirm = null
+                    val existing = AiWorkspaceStore.sourceSession(issue.sourceKey, extension)
+                    val canReuseSession = existing != null &&
+                        aiWorkspace.models.any { it.id == existing.modelId }
+                    if (canReuseSession) {
+                        val session = AiWorkspaceStore.enqueueSourceTask(
+                            issue.sourceKey,
+                            request.task,
+                            extension,
+                            skillCapabilities = listOf(AiSkillCapability.SEARCH),
+                        )
+                        nav.navigationAiChat(session.id, returnToSearch = true)
+                    } else {
+                        repairAwaitingModel = request
+                    }
+                }) {
+                    Text("继续")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { repairToConfirm = null }) {
+                    Text("取消")
+                }
+            },
+        )
+    }
+
+    repairAwaitingModel?.let { request ->
+        AiModelSelectionDialog(
+            models = aiWorkspace.models.filter { it.enabled },
+            onDismiss = { repairAwaitingModel = null },
+            onSelected = { model ->
+                val session = AiWorkspaceStore.enqueueSourceTask(
+                    request.issue.sourceKey,
+                    request.task,
+                    request.extension,
+                    modelId = model.id,
+                    skillCapabilities = listOf(AiSkillCapability.SEARCH),
+                )
+                repairAwaitingModel = null
+                nav.navigationAiChat(session.id, returnToSearch = true)
+            },
+        )
+    }
 }
+
+data class SearchRepairIssue(
+    val sourceKey: String,
+    val sourceLabel: String,
+    val keyword: String,
+    val errorMsg: String,
+    val emptyResult: Boolean,
+)
+
+private data class PendingSearchRepair(
+    val issue: SearchRepairIssue,
+    val task: String,
+    val extension: ExtensionInfo.Installed?,
+)
+
+private fun searchRepairTask(issue: SearchRepairIssue): String = """
+    请修复当前 $AI_PRODUCT_NAME 番源的搜索功能${if (issue.emptyResult) "对应有内容关键词却返回空列表" else "加载失败"}的问题。
+
+    当前信息：
+    - 番源：${issue.sourceLabel}
+    - 番源 key：${issue.sourceKey}
+    - 搜索词：${issue.keyword}
+    - 现象：${issue.errorMsg}
+
+    修复并验证后，用户会返回搜索页重试。
+""".trimIndent()
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

@@ -9,7 +9,6 @@ import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -19,7 +18,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.heyanle.easybangumi4.plugin.api.component.page.SourcePage
 import com.heyanle.easybangumi4.ui.common.ErrorPage
@@ -27,6 +25,7 @@ import com.heyanle.easybangumi4.ui.common.FastScrollToTopFab
 import com.heyanle.easybangumi4.ui.common.LoadingPage
 import com.heyanle.easybangumi4.ui.common.cover_star.CoverStarViewModel
 import com.heyanle.easybangumi4.ui.common.page.list.SourceListPage
+import com.heyanle.easybangumi4.ui.common.page.SourcePageErrorActions
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -62,12 +61,9 @@ fun SourceListPageGroup(
                 ErrorPage(
                     modifier = Modifier.fillMaxSize(),
                     errorMsg = it.errorMsg,
-                    clickEnable = true,
-                    onClick = {
-                        vm.refresh()
-                    },
+                    clickEnable = false,
                     other = {
-                        Text(text = stringResource(id = com.heyanle.easy_i18n.R.string.click_to_retry))
+                        SourcePageErrorActions(it.errorMsg, vm::refresh)
                     }
                 )
             }

@@ -15,6 +15,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
@@ -40,6 +41,10 @@ import com.heyanle.easybangumi4.ui.common.CartoonCardWithCover
 import com.heyanle.easybangumi4.ui.common.PagingCommon
 import com.heyanle.easybangumi4.ui.common.cover_star.CoverStarViewModel
 import com.heyanle.easybangumi4.ui.common.pagingCommonHor
+import com.heyanle.easybangumi4.ui.common.page.LocalSourcePageEmptyHandler
+import com.heyanle.easybangumi4.ui.common.page.LocalSourcePageErrorHandler
+import com.heyanle.easybangumi4.ui.common.page.SourcePageEmptyAction
+import com.heyanle.easybangumi4.ui.search_migrate.search.SearchRepairIssue
 import com.heyanle.easybangumi4.ui.search_migrate.search.SearchViewModel
 
 /**
@@ -47,7 +52,8 @@ import com.heyanle.easybangumi4.ui.search_migrate.search.SearchViewModel
  */
 @Composable
 fun ColumnScope.GatherSearch(
-    searchViewModel: SearchViewModel
+    searchViewModel: SearchViewModel,
+    onAskAi: (SearchRepairIssue) -> Unit,
 ) {
     val nav = LocalNavController.current
     val keyboard = LocalSoftwareKeyboardController.current
@@ -83,9 +89,12 @@ fun ColumnScope.GatherSearch(
     ) {
         itemList.value?.let {
             items(it) {
-                MigrateSourceItem(sourceItem = it, starVm = starVm){
-                    nav.navigationDetailed(it)
-                }
+                MigrateSourceItem(
+                    sourceItem = it,
+                    keyword = searchKey.value,
+                    starVm = starVm,
+                    onAskAi = onAskAi,
+                ) { cover -> nav.navigationDetailed(cover) }
             }
         }
 
@@ -95,13 +104,39 @@ fun ColumnScope.GatherSearch(
 @Composable
 fun MigrateSourceItem(
     sourceItem: GatherSearchViewModel.GatherSearchItem,
+    keyword: String = "",
     starVm: CoverStarViewModel,
     supportLongTouchStart: Boolean = true,
+    onAskAi: ((SearchRepairIssue) -> Unit)? = null,
     onClick: (CartoonCover)->Unit,
 ) {
     val page = sourceItem.flow.collectAsLazyPagingItems()
     val haptic = LocalHapticFeedback.current
     val set = starVm.stateFlow.collectAsState().value.identifySet
+    val source = sourceItem.searchComponent.source
+    val issue: (String, Boolean) -> SearchRepairIssue = { message, empty ->
+        SearchRepairIssue(
+            sourceKey = source.key,
+            sourceLabel = source.label,
+            keyword = keyword,
+            errorMsg = message,
+            emptyResult = empty,
+        )
+    }
+    CompositionLocalProvider(
+        LocalSourcePageErrorHandler provides onAskAi?.let { ask ->
+            { error -> ask(issue(error, false)) }
+        },
+        LocalSourcePageEmptyHandler provides onAskAi?.let { ask ->
+            SourcePageEmptyAction(
+                emptyMsg = "没有搜索结果，换个关键词试试",
+                buttonText = "这个关键词应该有结果？使用 AI 修复",
+                onClick = {
+                    ask(issue("搜索成功但返回空列表，用户确认该关键词应当有结果", true))
+                },
+            )
+        },
+    ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -145,5 +180,6 @@ fun MigrateSourceItem(
         }
         PagingCommon(items = page)
 
+    }
     }
 }

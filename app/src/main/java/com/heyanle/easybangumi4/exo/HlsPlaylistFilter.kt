@@ -74,7 +74,7 @@ internal object HlsPlaylistFilter {
         }
         val hostDurations = linkedMapOf<String, Double>()
         hosts.forEachIndexed { index, host ->
-            if (host.isNotEmpty()) hostDurations[host] = hostDurations.getOrDefault(host, 0.0) + safeDurations[index]
+            if (host.isNotEmpty()) hostDurations[host] = (hostDurations[host] ?: 0.0) + safeDurations[index]
         }
         if (hostDurations.size < 2) return removed
         val totalDuration = hostDurations.values.sum()

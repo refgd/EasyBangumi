@@ -101,8 +101,15 @@ const val AI_MODELS = "ai_models"
 const val AI_PROXIES = "ai_proxies"
 const val AI_SKILLS = "ai_skills"
 
-fun NavHostController.navigationAiChat(sessionId: String) {
-    navigate("$AI_CHAT/$sessionId")
+fun NavHostController.navigationAiChat(
+    sessionId: String,
+    returnToPlayer: Boolean = false,
+    returnToHome: Boolean = false,
+    returnToSearch: Boolean = false,
+) {
+    navigate(
+        "$AI_CHAT/$sessionId?returnToPlayer=$returnToPlayer&returnToHome=$returnToHome&returnToSearch=$returnToSearch"
+    )
 }
 
 fun NavHostController.navigationSearch(
@@ -466,11 +473,30 @@ fun Nav() {
             }
 
             composable(
-                "$AI_CHAT/{sessionId}",
-                arguments = listOf(navArgument("sessionId") { defaultValue = "" }),
+                "$AI_CHAT/{sessionId}?returnToPlayer={returnToPlayer}&returnToHome={returnToHome}&returnToSearch={returnToSearch}",
+                arguments = listOf(
+                    navArgument("sessionId") { defaultValue = "" },
+                    navArgument("returnToPlayer") {
+                        type = NavType.BoolType
+                        defaultValue = false
+                    },
+                    navArgument("returnToHome") {
+                        type = NavType.BoolType
+                        defaultValue = false
+                    },
+                    navArgument("returnToSearch") {
+                        type = NavType.BoolType
+                        defaultValue = false
+                    },
+                ),
             ) {
                 NormalSystemBarColor()
-                AiChat(it.arguments?.getString("sessionId").orEmpty())
+                AiChat(
+                    sessionId = it.arguments?.getString("sessionId").orEmpty(),
+                    returnToPlayer = it.arguments?.getBoolean("returnToPlayer") ?: false,
+                    returnToHome = it.arguments?.getBoolean("returnToHome") ?: false,
+                    returnToSearch = it.arguments?.getBoolean("returnToSearch") ?: false,
+                )
             }
 
             composable(AI_MODELS) {

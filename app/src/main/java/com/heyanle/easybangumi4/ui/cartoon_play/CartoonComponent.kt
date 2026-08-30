@@ -64,6 +64,7 @@ import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -138,6 +139,7 @@ fun CartoonPlayDetailed(
     onDelete: (PlayLineWrapper, List<Episode>) -> Unit,
     onSave: (PlayLineWrapper, List<Episode>) -> Unit,
     onSortChange: (String, Boolean) -> Unit,
+    onAskAi: (repairPlayList: Boolean) -> Unit,
 ) {
 
     // 0-> download 1->delete 2->saving
@@ -233,6 +235,33 @@ fun CartoonPlayDetailed(
             gridCount = gridCount,
             onGridChange = onGridChange
         )
+
+        // 当前来源的播放列表状态
+        item(
+            span = { GridItemSpan(maxLineSpan) },
+        ) {
+            val hasPlayList = playLines.getOrNull(selectLineIndex)
+                ?.sortedEpisodeList
+                ?.isNotEmpty() == true
+            if (hasPlayList) {
+                TextButton(
+                    onClick = { onAskAi(false) },
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                ) {
+                    Text("无法播放？点击询问 AI")
+                }
+            } else {
+                EmptyPage(
+                    modifier = Modifier.fillMaxWidth(),
+                    emptyMsg = "没有播放列表",
+                    other = {
+                        TextButton(onClick = { onAskAi(true) }) {
+                            Text("使用 AI 修复播放列表")
+                        }
+                    },
+                )
+            }
+        }
 
         // 集数
         cartoonEpisodeList(
@@ -668,20 +697,7 @@ fun LazyGridScope.cartoonPlayLines(
 ) {
 
     // 播放线路
-    if (playLines.isEmpty()) {
-        item(
-            span = {
-                // LazyGridItemSpanScope:
-                // maxLineSpan
-                GridItemSpan(maxLineSpan)
-            }
-        ) {
-            EmptyPage(
-                modifier = Modifier.fillMaxWidth(),
-                emptyMsg = stringResource(id = com.heyanle.easy_i18n.R.string.no_play_line)
-            )
-        }
-    } else {
+    if (playLines.isNotEmpty()) {
         item(
             span = {
                 // LazyGridItemSpanScope:

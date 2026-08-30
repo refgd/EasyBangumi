@@ -6,17 +6,9 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.heyanle.easybangumi4.plugin.extension.ExtensionController
-import com.heyanle.easybangumi4.plugin.extension.ExtensionInfo
-import com.heyanle.easybangumi4.plugin.js.extension.JSExtensionInnerLoader
-import com.heyanle.easybangumi4.plugin.js.runtime.JSRuntimeProvider
-import com.heyanle.easybangumi4.plugin.source.Debug
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withContext
 import okhttp3.Call
 import okhttp3.Callback
@@ -26,12 +18,9 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
-import okio.Buffer
-import java.io.File
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.Proxy
-import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -44,37 +33,29 @@ data class AiAgentEvent(
 )
 
 class AiAgent(
-    private val extensionController: ExtensionController,
+    extensionController: ExtensionController,
 ) {
-    private val validationRuntime = JSRuntimeProvider(1)
+    private val sourceTools = AiSourceToolExecutor(extensionController)
+    private var cachedProxyConfig: AiProxyConfig? = null
+    private var cachedAiClient: OkHttpClient? = null
 
     suspend fun reply(
         sessionId: String,
         onProgress: (String) -> Unit = {},
         onEvent: (AiAgentEvent) -> Unit = {},
         consumePendingPrompts: suspend () -> List<String> = { emptyList() },
-    ): Result<String> = withContext(Dispatchers.IO) {
-        runCatching {
+    ): Result<String> = try {
+        withContext(Dispatchers.IO) {
+        val result = runCatching {
             reportProgress(onProgress, onEvent, "正在准备会话和模型...")
             var session = AiWorkspaceStore.session(sessionId) ?: error("会话不存在")
             val workspace = AiWorkspaceStore.state.value
-            val model = workspace.models.firstOrNull { it.id == session.modelId }
-                ?: workspace.models.firstOrNull { it.enabled }
-                ?: error("请先添加并启用模型")
+            val model = workspace.models.firstOrNull { it.id == session.modelId && it.enabled }
+                ?: error("当前会话选择的模型不存在或已停用，请重新选择模型")
             if (model.endpointUrl.isBlank() || model.model.isBlank()) error("模型 API 端点和模型名称不能为空")
-
             val apiMessages = JsonArray()
-            val systemPrompt = buildString {
-                workspace.skills.filter { it.enabled && it.id in session.skillIds }.forEach {
-                    appendLine(it.prompt)
-                    appendLine()
-                }
-                appendLine("当前会话绑定源 key: ${session.sourceKey.ifBlank { "尚未确定" }}")
-                appendLine("当前源码由 source_get 工具提供。需要修改时必须调用 source_replace。")
-                appendLine("可调用工具及参数由本次 API 请求的 tools JSON Schema 提供；不要编造工具名或只在回复中粘贴源码。")
-                appendLine("发现 JSON API 后必须抽样对比官网对应首页、分类页和搜索结果；ID、标题、结果集合或内容口径明显不一致时，该页面不得直接使用此 API。")
-                appendLine("source_replace 会在源码可加载时自动更新安装。修改后至少调用 source_validate；需要验证真实数据链路时调用 source_debug，最终媒体地址使用 media_probe 直连验证。")
-            }
+            val systemPrompt = workspace.systemPromptFor(session)
+            val tools = aiToolDefinitions(AI_SOURCE_TOOL_NAMES)
             val proxy = if (model.useProxy) {
                 workspace.proxies.firstOrNull { it.id == model.proxyId }
                     ?: error("模型已开启 AI 代理，但所选代理不存在，请编辑模型")
@@ -88,6 +69,7 @@ class AiAgent(
                     onProgress,
                     onEvent,
                     consumePendingPrompts,
+                    tools,
                 )
             }
             if (model.providerType == PROVIDER_ANTHROPIC) {
@@ -100,6 +82,7 @@ class AiAgent(
                     onProgress,
                     onEvent,
                     consumePendingPrompts,
+                    tools,
                 )
             }
             apiMessages.add(message("system", systemPrompt))
@@ -107,7 +90,7 @@ class AiAgent(
 
             repeat(MAX_TOOL_ROUNDS) { round ->
                 reportProgress(onProgress, onEvent, "第 ${round + 1} 轮：等待模型响应...")
-                val response = request(model, proxy, apiMessages, onEvent)
+                val response = request(model, proxy, apiMessages, tools, onEvent)
                 val assistant = response.getAsJsonArray("choices")?.firstOrNull()?.asJsonObject
                     ?.getAsJsonObject("message") ?: error("模型响应缺少 choices[0].message")
                 val content = assistant.get("content")?.takeUnless { it.isJsonNull }?.asString.orEmpty()
@@ -142,17 +125,17 @@ class AiAgent(
                     val name = function?.get("name")?.asString.orEmpty()
                     Log.d(TAG, "tool round=${round + 1}/$MAX_TOOL_ROUNDS name=$name")
                     reportProgress(onProgress, onEvent, "第 ${round + 1} 轮：${toolProgressText(name)}")
-                    val arguments = runCatching {
-                        JsonParser.parseString(function?.get("arguments")?.asString ?: "{}").asJsonObject
-                    }.getOrElse { JsonObject() }
-                    val toolResult = runCatching { executeTool(name, arguments, session) }
-                        .getOrElse { "工具执行失败: ${it.message ?: it.javaClass.simpleName}" }
-                    reportToolResult(onEvent, name, toolResult)
+                    val toolResult = executeToolCall(
+                        name,
+                        function?.get("arguments")?.asString ?: "{}",
+                        session,
+                    )
+                    reportToolResult(onEvent, name, toolResult.content)
                     session = AiWorkspaceStore.session(sessionId) ?: session
                     apiMessages.add(JsonObject().apply {
                         addProperty("role", "tool")
                         addProperty("tool_call_id", callId)
-                        addProperty("content", toolResult.take(MAX_TOOL_OUTPUT_CHARS))
+                        addProperty("content", toolResult.modelContent.take(MAX_TOOL_OUTPUT_CHARS))
                     })
                 }
                 val pending = consumePendingPrompts()
@@ -168,6 +151,11 @@ class AiAgent(
             }
             error("模型连续调用工具次数过多，请缩小任务后重试")
         }
+        result.exceptionOrNull()?.let { if (it is CancellationException) throw it }
+            result
+        }
+    } finally {
+        sourceTools.close()
     }
 
     private suspend fun replyCodex(
@@ -178,6 +166,7 @@ class AiAgent(
         onProgress: (String) -> Unit,
         onEvent: (AiAgentEvent) -> Unit,
         consumePendingPrompts: suspend () -> List<String>,
+        tools: JsonArray,
     ): String {
         var session = initialSession
         val input = JsonArray().apply {
@@ -187,7 +176,7 @@ class AiAgent(
         }
         repeat(MAX_TOOL_ROUNDS) { round ->
             reportProgress(onProgress, onEvent, "第 ${round + 1} 轮：等待 Codex 响应...")
-            val result = requestCodex(model, proxyConfig, instructions, input, onEvent)
+            val result = requestCodex(model, proxyConfig, instructions, input, tools, onEvent)
             result.items.forEach(input::add)
             val calls = result.items.filter { item ->
                 item.asJsonObject.get("type")?.asString == "function_call"
@@ -213,17 +202,17 @@ class AiAgent(
                 val callId = call.string("call_id")
                 Log.d(TAG, "Codex tool round=${round + 1}/$MAX_TOOL_ROUNDS name=$name")
                 reportProgress(onProgress, onEvent, "第 ${round + 1} 轮：${toolProgressText(name)}")
-                val arguments = runCatching {
-                    JsonParser.parseString(call.string("arguments").ifBlank { "{}" }).asJsonObject
-                }.getOrElse { JsonObject() }
-                val toolResult = runCatching { executeTool(name, arguments, session) }
-                    .getOrElse { "工具执行失败: ${it.message ?: it.javaClass.simpleName}" }
-                reportToolResult(onEvent, name, toolResult)
+                val toolResult = executeToolCall(
+                    name,
+                    call.string("arguments").ifBlank { "{}" },
+                    session,
+                )
+                reportToolResult(onEvent, name, toolResult.content)
                 session = AiWorkspaceStore.session(session.id) ?: session
                 input.add(JsonObject().apply {
                     addProperty("type", "function_call_output")
                     addProperty("call_id", callId)
-                    addProperty("output", toolResult.take(MAX_TOOL_OUTPUT_CHARS))
+                    addProperty("output", toolResult.modelContent.take(MAX_TOOL_OUTPUT_CHARS))
                 })
             }
             val pending = consumePendingPrompts()
@@ -248,6 +237,7 @@ class AiAgent(
         onProgress: (String) -> Unit,
         onEvent: (AiAgentEvent) -> Unit,
         consumePendingPrompts: suspend () -> List<String>,
+        tools: JsonArray,
     ): String {
         var session = initialSession
         val messages = JsonArray().apply {
@@ -257,7 +247,7 @@ class AiAgent(
         }
         repeat(MAX_TOOL_ROUNDS) { round ->
             reportProgress(onProgress, onEvent, "第 ${round + 1} 轮：等待 Claude 响应...")
-            val result = requestAnthropic(model, proxyConfig, systemPrompt, messages, onEvent)
+            val result = requestAnthropic(model, proxyConfig, systemPrompt, messages, tools, onEvent)
             messages.add(JsonObject().apply {
                 addProperty("role", "assistant")
                 add("content", result.content.deepCopy())
@@ -294,14 +284,14 @@ class AiAgent(
             result.toolCalls.forEach { call ->
                 Log.d(TAG, "Claude tool round=${round + 1}/$MAX_TOOL_ROUNDS name=${call.name}")
                 reportProgress(onProgress, onEvent, "第 ${round + 1} 轮：${toolProgressText(call.name)}")
-                val toolResult = runCatching { executeTool(call.name, call.input, session) }
-                    .getOrElse { "工具执行失败: ${it.message ?: it.javaClass.simpleName}" }
-                reportToolResult(onEvent, call.name, toolResult)
+                val toolResult = executeToolCall(call.name, call.input, session)
+                reportToolResult(onEvent, call.name, toolResult.content)
                 session = AiWorkspaceStore.session(session.id) ?: session
                 userContent.add(JsonObject().apply {
                     addProperty("type", "tool_result")
                     addProperty("tool_use_id", call.id)
-                    addProperty("content", toolResult.take(MAX_TOOL_OUTPUT_CHARS))
+                    addProperty("content", toolResult.content.take(MAX_TOOL_OUTPUT_CHARS))
+                    if (toolResult.isError) addProperty("is_error", true)
                 })
             }
             val pending = consumePendingPrompts()
@@ -344,7 +334,7 @@ class AiAgent(
         result: String,
     ) {
         val summary = when (name) {
-            "source_get" -> "已读取当前完整源码（${result.length} 字符）"
+            "source_get" -> "已读取当前源码片段（${result.length} 字符）"
             "source_replace" -> result.lineSequence().firstOrNull().orEmpty()
             else -> result.take(MAX_VISIBLE_EVENT_CHARS)
         }
@@ -355,9 +345,10 @@ class AiAgent(
 
     private fun toolProgressText(name: String): String = when (name) {
         "source_get" -> "读取当前源码..."
+        "source_docs" -> "读取组件 API 契约..."
         "source_replace" -> "写入生成的源码..."
         "source_validate" -> "校验源码..."
-        "source_debug" -> "在 APP 内调试完整数据链路..."
+        "source_debug" -> "在 $AI_PRODUCT_NAME 内调试完整数据链路..."
         "installed_sources" -> "读取已安装源列表..."
         "installed_source_read" -> "读取已安装源源码..."
         "http_request" -> "请求并分析目标网站/API..."
@@ -367,6 +358,7 @@ class AiAgent(
 
     private fun toolDisplayName(name: String): String = when (name) {
         "source_get" -> "读取源码"
+        "source_docs" -> "组件 API 契约"
         "source_replace" -> "写入源码"
         "source_validate" -> "校验源码"
         "source_debug" -> "数据链路调试"
@@ -390,14 +382,16 @@ class AiAgent(
         model: AiModelConfig,
         proxyConfig: AiProxyConfig?,
         messages: JsonArray,
+        tools: JsonArray,
         onEvent: (AiAgentEvent) -> Unit,
     ): JsonObject {
         val client = aiClient(proxyConfig)
         val payload = JsonObject().apply {
             addProperty("model", model.model)
             add("messages", messages)
-            add("tools", toolDefinitions())
+            add("tools", tools.deepCopy())
             addProperty("tool_choice", "auto")
+            addProperty("parallel_tool_calls", false)
             addProperty("stream", true)
         }
         val request = Request.Builder()
@@ -483,6 +477,7 @@ class AiAgent(
         proxyConfig: AiProxyConfig?,
         systemPrompt: String,
         messages: JsonArray,
+        tools: JsonArray,
         onEvent: (AiAgentEvent) -> Unit,
     ): AnthropicResponse {
         val payload = JsonObject().apply {
@@ -490,7 +485,7 @@ class AiAgent(
             addProperty("max_tokens", ANTHROPIC_MAX_TOKENS)
             addProperty("system", systemPrompt)
             add("messages", messages)
-            add("tools", anthropicToolDefinitions())
+            add("tools", anthropicToolDefinitions(tools))
             add("tool_choice", JsonObject().apply { addProperty("type", "auto") })
             addProperty("stream", true)
         }
@@ -604,6 +599,7 @@ class AiAgent(
         proxyConfig: AiProxyConfig?,
         instructions: String,
         input: JsonArray,
+        tools: JsonArray,
         onEvent: (AiAgentEvent) -> Unit,
     ): CodexResponse {
         var auth = AiWorkspaceStore.state.value.codexAuth ?: error("请先在模型管理中登录 ChatGPT")
@@ -612,9 +608,9 @@ class AiAgent(
                 addProperty("model", model.model)
                 addProperty("instructions", instructions)
                 add("input", input)
-                add("tools", responseToolDefinitions())
+                add("tools", responseToolDefinitions(tools))
                 addProperty("tool_choice", "auto")
-                addProperty("parallel_tool_calls", true)
+                addProperty("parallel_tool_calls", false)
                 addProperty("store", false)
                 addProperty("stream", true)
                 add("reasoning", JsonObject().apply { addProperty("summary", "auto") })
@@ -694,7 +690,9 @@ class AiAgent(
         }
     }
 
+    @Synchronized
     private fun aiClient(proxyConfig: AiProxyConfig?): OkHttpClient {
+        cachedAiClient?.takeIf { cachedProxyConfig == proxyConfig }?.let { return it }
         val builder = OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(180, TimeUnit.SECONDS)
@@ -709,7 +707,10 @@ class AiAgent(
                 }
             }
         }
-        return builder.build()
+        return builder.build().also {
+            cachedProxyConfig = proxyConfig
+            cachedAiClient = it
+        }
     }
 
     private suspend fun Call.awaitResponse(): Response = suspendCancellableCoroutine { continuation ->
@@ -725,247 +726,41 @@ class AiAgent(
         })
     }
 
-    private suspend fun executeTool(name: String, arguments: JsonObject, session: AiSession): String = when (name) {
-        "source_get" -> session.sourceCode.ifBlank { "当前会话还没有源码" }
-        "source_replace" -> {
-            val code = arguments.string("code")
-            require(code.isNotBlank()) { "code 不能为空" }
-            val metadata = validate(code)
-            val updated = session.copy(
-                title = metadata?.label?.takeIf { it.isNotBlank() } ?: session.title,
-                sourceCode = code,
-                sourceKey = metadata?.key?.removeSuffix(".__debug__") ?: session.sourceKey,
-                sourceVersionName = metadata?.versionName ?: session.sourceVersionName.orEmpty(),
-            )
-            AiWorkspaceStore.saveSession(updated)
-            if (metadata == null) {
-                "源码已写回会话，但元数据校验未通过；请调用 source_validate 获取错误"
-            } else {
-                require(metadata.key.matches(SAFE_KEY)) { "自动安装失败: key 只能包含字母、数字、点、下划线和连字符" }
-                val error = extensionController.appendJsExtensionSource(
-                    "${metadata.key}.ebg.js",
-                    metadata.key,
-                    code,
-                )
-                if (error == null) {
-                    "源码已写回会话并自动更新安装"
-                } else {
-                    "源码已写回会话，但自动安装失败: ${error.message ?: error.javaClass.simpleName}"
-                }
-            }
-        }
-        "source_validate" -> validateResult(session.sourceCode)
-        "source_debug" -> debugSource(session, arguments)
-        "installed_sources" -> installedSources()
-        "installed_source_read" -> readInstalledSource(arguments.string("key"))
-        "http_request" -> httpRequest(arguments)
-        "media_probe" -> mediaProbe(arguments)
-        else -> "未知工具: $name"
+    private suspend fun executeToolCall(name: String, rawArguments: String, session: AiSession): AiToolCallResult = try {
+        val arguments = JsonParser.parseString(rawArguments).asJsonObject
+        toolCallResult(sourceTools.execute(name, arguments, session))
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (error: Throwable) {
+        AiToolCallResult("工具执行失败: ${error.message ?: error.javaClass.simpleName}", true)
     }
 
-    private fun validate(code: String): ExtensionInfo.Installed? =
-        JSExtensionInnerLoader(code, validationRuntime, false).load() as? ExtensionInfo.Installed
-
-    private fun validateResult(code: String): String {
-        if (code.isBlank()) return "校验失败: 源码为空"
-        return when (val result = JSExtensionInnerLoader(code, validationRuntime, false).load()) {
-            is ExtensionInfo.InstallError -> "校验失败: ${result.errMsg}${result.exception?.message?.let { ": $it" }.orEmpty()}"
-            is ExtensionInfo.Installed -> "校验通过: key=${result.key}, label=${result.label}, version=${result.versionName}, versionCode=${result.versionCode}, libVersion=${result.libVersion}"
-        }
+    private suspend fun executeToolCall(name: String, arguments: JsonObject, session: AiSession): AiToolCallResult = try {
+        toolCallResult(sourceTools.execute(name, arguments, session))
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (error: Throwable) {
+        AiToolCallResult("工具执行失败: ${error.message ?: error.javaClass.simpleName}", true)
     }
 
-    private suspend fun debugSource(session: AiSession, arguments: JsonObject): String {
-        val extension = validate(session.sourceCode) ?: return validateResult(session.sourceCode)
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-        val completion = CompletableDeferred<String>()
-        val events = mutableListOf<String>()
-        val preferred = mapOf(
-            "main" to arguments.intOrNull("mainIndex"),
-            "sub" to arguments.intOrNull("subIndex"),
-            "content" to arguments.intOrNull("contentIndex"),
-            "search" to arguments.intOrNull("contentIndex"),
-            "playLine" to arguments.intOrNull("playLineIndex"),
-            "episode" to arguments.intOrNull("episodeIndex"),
+    private fun toolCallResult(content: String): AiToolCallResult {
+        val isError = content.startsWith(AiSourceToolExecutor.TOOL_ERROR_PREFIX)
+        return AiToolCallResult(
+            content = content.removePrefix(AiSourceToolExecutor.TOOL_ERROR_PREFIX).trimStart(),
+            isError = isError,
         )
-        val callback = object : Debug.Callback {
-            override fun printLog(state: Int, msg: String) {
-                synchronized(events) { events += "log[$state] $msg" }
-            }
-
-            override fun emit(event: Debug.Event) {
-                val summary = buildString {
-                    append(event.type)
-                    event.stage?.let { append(" stage=").append(it) }
-                    if (event.title.isNotBlank()) append(" ").append(event.title)
-                    if (event.message.isNotBlank()) append(": ").append(event.message.take(2000))
-                    if (event.fields.isNotEmpty()) append(" ").append(event.fields.entries.joinToString { "${it.key}=${it.value}" })
-                    if (event.options.isNotEmpty()) append(" options=").append(event.options.take(20).joinToString { "${it.index}:${it.label}" })
-                }
-                synchronized(events) { events += summary }
-                when (event.type) {
-                    "selection" -> {
-                        val stage = event.stage ?: return
-                        val requested = preferred[stage]
-                        val index = requested?.takeIf { value -> event.options.any { it.index == value } }
-                            ?: if (stage == "episode") event.options.lastOrNull()?.index else event.options.firstOrNull()?.index
-                        if (index == null) completion.complete("调试失败: ${event.title} 没有可选项")
-                        else Debug.select(scope, stage, index)
-                    }
-                    "ready" -> completion.complete("调试通过")
-                    "error" -> completion.complete("调试失败: ${event.message.ifBlank { event.title }}")
-                }
-            }
-        }
-        return try {
-            Debug.cancelDebug(true)
-            Debug.callback = callback
-            val keyword = arguments.string("searchKeyword")
-            Debug.startDebug(scope, extension)
-            if (keyword.isNotBlank()) Debug.search(scope, keyword)
-            val result = withTimeout(DEBUG_TIMEOUT_MS) { completion.await() }
-            "$result\n${synchronized(events) { events.joinToString("\n") }}".take(MAX_TOOL_OUTPUT_CHARS)
-        } finally {
-            if (Debug.callback === callback) Debug.cancelDebug(true)
-            scope.cancel()
-        }
     }
 
-    private fun installedSources(): String {
-        val rows = extensionController.state.value.extensionInfoMap.values
-            .filterIsInstance<ExtensionInfo.Installed>()
-            .filter { it.loadType == ExtensionInfo.TYPE_JS_FILE }
-            .flatMap { extension -> extension.sources.map { "${it.key}\t${it.label}\t${extension.sourcePath}" } }
-        return rows.ifEmpty { listOf("没有已安装的 JS 源") }.joinToString("\n")
-    }
-
-    private fun readInstalledSource(key: String): String {
-        val extension = extensionController.state.value.extensionInfoMap.values
-            .filterIsInstance<ExtensionInfo.Installed>()
-            .firstOrNull { info -> info.sources.any { it.key == key } }
-            ?: return "未找到源: $key"
-        val file = File(extension.sourcePath)
-        if (!file.isFile || !file.name.endsWith(".js")) return "该源不是可读取的明文 JS 插件"
-        return file.readText(Charsets.UTF_8).take(MAX_TOOL_OUTPUT_CHARS)
-    }
-
-    private fun httpRequest(arguments: JsonObject): String {
-        val url = arguments.string("url")
-        require(url.startsWith("http://") || url.startsWith("https://")) { "仅支持 HTTP/HTTPS URL" }
-        val method = arguments.string("method").ifBlank { "GET" }.uppercase()
-        val body = arguments.string("body")
-        val builder = OkHttpClient.Builder().connectTimeout(20, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS)
-        val request = Request.Builder().url(url).apply {
-            arguments.getAsJsonObject("headers")?.entrySet()?.forEach { (key, value) -> header(key, value.asString) }
-            if (method == "GET" || method == "HEAD") method(method, null)
-            else method(method, body.toRequestBody("text/plain; charset=utf-8".toMediaType()))
-        }.build()
-        builder.build().newCall(request).execute().use { response ->
-            val responseBody = response.body?.string().orEmpty().take(MAX_HTTP_CHARS)
-            val headers = response.headers.names().joinToString("\n") { "$it: ${response.header(it).orEmpty()}" }
-            return "HTTP ${response.code}\n$headers\n\n$responseBody"
-        }
-    }
-
-    private fun mediaProbe(arguments: JsonObject): String {
-        val rawUrl = arguments.string("url")
-        require(rawUrl.startsWith("http://") || rawUrl.startsWith("https://")) { "仅支持 HTTP/HTTPS URL" }
-        val headers = arguments.getAsJsonObject("headers")
-        val client = OkHttpClient.Builder().connectTimeout(20, TimeUnit.SECONDS).readTimeout(30, TimeUnit.SECONDS).build()
-
-        fun fetch(url: String): Triple<Int, okhttp3.HttpUrl, String> {
-            val request = Request.Builder().url(url).apply {
-                headers?.entrySet()?.forEach { (key, value) -> header(key, value.asString) }
-                header("Range", "bytes=0-${MAX_MEDIA_SAMPLE_BYTES - 1}")
-            }.build()
-            client.newCall(request).execute().use { response ->
-                val bytes = response.body?.source()?.let { source ->
-                    val buffer = Buffer()
-                    var remaining = MAX_MEDIA_SAMPLE_BYTES
-                    while (remaining > 0) {
-                        val read = source.read(buffer, remaining)
-                        if (read == -1L) break
-                        remaining -= read
-                    }
-                    buffer.readByteArray()
-                } ?: byteArrayOf()
-                return Triple(response.code, response.request.url, bytes.toString(Charsets.UTF_8))
-            }
-        }
-
-        var (status, finalUrl, body) = fetch(rawUrl)
-        if (status !in 200..299) return "媒体探测失败: HTTP $status, url=$finalUrl"
-        if (!body.trimStart().startsWith("#EXTM3U")) {
-            return "媒体地址可访问: HTTP $status, finalUrl=$finalUrl, sampleBytes=${body.toByteArray().size}"
-        }
-
-        val masterLines = body.lineSequence().map(String::trim).filter(String::isNotEmpty).toList()
-        if (masterLines.any { it.startsWith("#EXT-X-STREAM-INF") }) {
-            val variant = masterLines.indices.firstNotNullOfOrNull { index ->
-                if (masterLines[index].startsWith("#EXT-X-STREAM-INF")) {
-                    masterLines.drop(index + 1).firstOrNull { !it.startsWith("#") }
-                } else null
-            }
-            if (variant != null) {
-                val variantUrl = finalUrl.resolve(variant) ?: error("无法解析 m3u8 子清单地址")
-                val fetched = fetch(variantUrl.toString())
-                status = fetched.first
-                finalUrl = fetched.second
-                body = fetched.third
-                if (status !in 200..299) return "m3u8 主清单可访问，但子清单失败: HTTP $status, url=$finalUrl"
-            }
-        }
-
-        val lines = body.lineSequence().map(String::trim).filter(String::isNotEmpty).toList()
-        val durations = lines.filter { it.startsWith("#EXTINF:") }.mapNotNull {
-            it.substringAfter(':').substringBefore(',').toDoubleOrNull()
-        }
-        val segments = lines.filter { !it.startsWith("#") }
-        val sampleSegments = listOfNotNull(segments.firstOrNull(), segments.lastOrNull()).distinct()
-        val segmentResults = sampleSegments.map { segment ->
-            val segmentUrl = finalUrl.resolve(segment)
-            if (segmentUrl == null) "$segment -> 地址无效" else {
-                val result = runCatching { fetch(segmentUrl.toString()) }.getOrNull()
-                "$segment -> HTTP ${result?.first ?: "请求失败"}"
-            }
-        }
-        val duration = durations.sum()
-        return buildString {
-            append("HLS 可访问: HTTP ").append(status).append(", finalUrl=").append(finalUrl)
-            append("\n分片=").append(segments.size)
-            append(", 总时长=").append(String.format(Locale.US, "%.1f", duration)).append(" 秒")
-            if (duration in 1.0..700.0) append("（疑似短片/试看，请核对正片时长）")
-            if (segmentResults.isNotEmpty()) append("\n分片抽测: ").append(segmentResults.joinToString("; "))
-        }
-    }
-
-    private fun toolDefinitions() = JsonArray().apply {
-        add(tool("source_get", "读取当前会话绑定的完整源代码"))
-        add(tool("source_replace", "用完整代码替换当前会话源码，保存并自动更新安装", mapOf("code" to "string"), listOf("code")))
-        add(tool("source_validate", "使用 APP 当前 JS 插件加载器校验源码元数据和兼容性"))
-        add(tool("source_debug", "在 APP 内自动调试当前源码，依次验证分类、列表、详情、线路、剧集和播放信息", mapOf(
-            "mainIndex" to "integer", "subIndex" to "integer", "contentIndex" to "integer",
-            "playLineIndex" to "integer", "episodeIndex" to "integer", "searchKeyword" to "string"
-        )))
-        add(tool("installed_sources", "列出 APP 中已安装的 JS 番源"))
-        add(tool("installed_source_read", "按源 key 读取已安装的明文 JS 源", mapOf("key" to "string"), listOf("key")))
-        add(tool("http_request", "请求目标网站/API，检查 JSON、HTML、播放清单或最终媒体地址", mapOf(
-            "url" to "string", "method" to "string", "headers" to "object", "body" to "string"
-        ), listOf("url")))
-        add(tool("media_probe", "直连探测最终媒体地址；HLS 会解析子清单、统计总时长并抽测首尾分片", mapOf(
-            "url" to "string", "headers" to "object"
-        ), listOf("url")))
-    }
-
-    private fun responseToolDefinitions() = JsonArray().apply {
-        toolDefinitions().forEach { definition ->
+    private fun responseToolDefinitions(toolDefinitions: JsonArray) = JsonArray().apply {
+        toolDefinitions.forEach { definition ->
             add(definition.asJsonObject.getAsJsonObject("function").deepCopy().apply {
                 addProperty("type", "function")
             })
         }
     }
 
-    private fun anthropicToolDefinitions() = JsonArray().apply {
-        toolDefinitions().forEach { definition ->
+    private fun anthropicToolDefinitions(toolDefinitions: JsonArray) = JsonArray().apply {
+        toolDefinitions.forEach { definition ->
             val function = definition.asJsonObject.getAsJsonObject("function")
             add(JsonObject().apply {
                 addProperty("name", function.string("name"))
@@ -973,22 +768,6 @@ class AiAgent(
                 add("input_schema", function.getAsJsonObject("parameters").deepCopy())
             })
         }
-    }
-
-    private fun tool(name: String, description: String, properties: Map<String, String> = emptyMap(), required: List<String> = emptyList()) = JsonObject().apply {
-        addProperty("type", "function")
-        add("function", JsonObject().apply {
-            addProperty("name", name)
-            addProperty("description", description)
-            add("parameters", JsonObject().apply {
-                addProperty("type", "object")
-                add("properties", JsonObject().apply {
-                    properties.forEach { (key, type) -> add(key, JsonObject().apply { addProperty("type", type) }) }
-                })
-                add("required", JsonArray().apply { required.forEach(::add) })
-                addProperty("additionalProperties", false)
-            })
-        })
     }
 
     private fun message(role: String, content: String) = JsonObject().apply {
@@ -1044,22 +823,26 @@ class AiAgent(
     }
 
     companion object {
-        private const val TAG = "EasyBangumiAiAgent"
+        private const val TAG = "AiAgent"
         private const val MAX_TOOL_ROUNDS = 32
         private const val MAX_TOOL_OUTPUT_CHARS = 120_000
         private const val MAX_VISIBLE_EVENT_CHARS = 1_200
         private const val MAX_VISIBLE_REASONING_CHARS = 4_000
-        private const val MAX_HTTP_CHARS = 200_000
-        private const val MAX_MEDIA_SAMPLE_BYTES = 2L * 1024 * 1024
-        private const val DEBUG_TIMEOUT_MS = 120_000L
         private const val REASONING_UPDATE_INTERVAL_MS = 500L
         private const val ANTHROPIC_API_VERSION = "2023-06-01"
         private const val ANTHROPIC_MAX_TOKENS = 32_768
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
-        private val SAFE_KEY = Regex("[A-Za-z0-9._-]+")
     }
 
     private data class CodexResponse(val items: List<JsonElement>, val text: String)
+
+    private data class AiToolCallResult(
+        val content: String,
+        val isError: Boolean,
+    ) {
+        val modelContent: String
+            get() = if (isError) "[tool_error]\n$content" else content
+    }
 
     private data class AnthropicResponse(
         val content: JsonArray,

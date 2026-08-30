@@ -62,6 +62,7 @@ class MainActivity : ComponentActivity() {
     var first by okkv("first_visible", def = true)
     private val launcherBus = LauncherBus(this)
 
+    @RequiresApi(Build.VERSION_CODES.O)
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
         PipController.onPictureInPictureModeChanged(isInPictureInPictureMode)
 

@@ -271,7 +271,14 @@ class ExtensionController(
                 if (continuation.isActive) continuation.resume(error)
             }
         }
-        if (error == null) jsExtensionProvider.awaitScanFolder()
+        if (error == null) {
+            jsExtensionProvider.awaitScanFolder()
+            val providerState = jsExtensionProvider.flow.value
+            _state.value = ExtensionState(
+                loading = providerState.loading,
+                extensionInfoMap = providerState.extensionMap,
+            )
+        }
         return error
     }
 

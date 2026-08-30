@@ -28,6 +28,7 @@ class HomeViewModel : ViewModel() {
 
     private val _stateFlow = MutableStateFlow(HomeState(selectionKey = selectionKeyOkkv))
     val stateFlow = _stateFlow.asStateFlow()
+    private val retrySignal = MutableStateFlow(0)
 
     private val sourceStateCase: SourceStateCase by Inject.injectLazy()
 
@@ -48,8 +49,9 @@ class HomeViewModel : ViewModel() {
         viewModelScope.launch {
             combine(
                 sourceStateCase.flowBundle(),
-                _stateFlow.map { it.selectionKey }.distinctUntilChanged()
-            ) { sourceBundle, s ->
+                _stateFlow.map { it.selectionKey }.distinctUntilChanged(),
+                retrySignal,
+            ) { sourceBundle, s, _ ->
                 val sources = sourceBundle.sources()
                 if (sources.isEmpty()) {
                     null
@@ -127,6 +129,10 @@ class HomeViewModel : ViewModel() {
             }
 
         }
+    }
+
+    fun retry() {
+        retrySignal.value += 1
     }
 
     private val viewModelOwnerStore = hashMapOf<SourcePage, ViewModelStore>()

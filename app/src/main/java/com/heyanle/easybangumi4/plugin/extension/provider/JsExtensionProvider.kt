@@ -69,6 +69,7 @@ class JsExtensionProvider(
     }
 
     override fun innerAppendExtension(displayName: String, inputStream: InputStream) {
+        fileObserver.stopWatching()
         val fileName = getNameWhenLoad(displayName, System.currentTimeMillis(), atomicLong.getAndIncrement())
         // "${System.currentTimeMillis()}-${atomicLong.getAndIncrement()}${getSuffix()}"
         File(cacheFolder).mkdirs()
@@ -108,7 +109,6 @@ class JsExtensionProvider(
         cacheFolderFile.deleteRecursively()
         cacheFolderFile.mkdirs()
         scanFolder()
-        fileObserver.startWatching()
     }
 
 }

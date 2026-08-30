@@ -2,6 +2,7 @@ package com.heyanle.easybangumi4.plugin.source
 
 import android.annotation.SuppressLint
 import com.heyanle.easybangumi4.BuildConfig
+import com.heyanle.easybangumi4.plugin.api.component.danmaku.DanmakuComponent
 import com.heyanle.easybangumi4.plugin.api.component.detailed.DetailedComponent
 import com.heyanle.easybangumi4.plugin.api.component.page.PageComponent
 import com.heyanle.easybangumi4.plugin.api.component.play.PlayComponent
@@ -41,6 +42,7 @@ object Debug {
     private var selectedSubTab: SubTab? = null
     private var selectedCover: CartoonCover? = null
     private var selectedPlayLine: PlayLine? = null
+    private var selectedEpisode: Episode? = null
     private var currentPageKey = 0
     private var currentSearchKeyword: String? = null
 
@@ -163,11 +165,19 @@ object Debug {
         selectedSubTab = null
         selectedCover = null
         selectedPlayLine = null
+        selectedEpisode = null
         contents = emptyList()
         playLines = emptyList()
         currentPageKey = key
         callback?.emit(contextEvent())
         getSearchContent(scope, keyword, key)
+    }
+
+    fun loadDanmaku(scope: CoroutineScope) {
+        val cover = selectedCover ?: return fail("请先选择数据")
+        val line = selectedPlayLine ?: return fail("请先选择播放线路")
+        val episode = selectedEpisode ?: return fail("请先选择剧集")
+        getDanmakuInfo(scope, cover, line, episode)
     }
 
     private fun clearSelection() {
@@ -179,6 +189,7 @@ object Debug {
         selectedSubTab = null
         selectedCover = null
         selectedPlayLine = null
+        selectedEpisode = null
         currentPageKey = 0
         currentSearchKeyword = null
     }
@@ -227,6 +238,7 @@ object Debug {
         selectedSubTab = null
         selectedCover = null
         selectedPlayLine = null
+        selectedEpisode = null
         subTabs = emptyList()
         contents = emptyList()
         playLines = emptyList()
@@ -275,6 +287,7 @@ object Debug {
         selectedSubTab = subTabs.getOrNull(index) ?: return fail("次分类序号无效: $index")
         selectedCover = null
         selectedPlayLine = null
+        selectedEpisode = null
         contents = emptyList()
         playLines = emptyList()
         currentPageKey = 0
@@ -305,6 +318,7 @@ object Debug {
                 contents = result.data.second
                 selectedCover = null
                 selectedPlayLine = null
+                selectedEpisode = null
                 playLines = emptyList()
                 log(debugSource, "获取分类内容完成，共 ${contents.size} 条，下一页=${result.data.first}")
                 callback?.emit(contextEvent())
@@ -347,6 +361,7 @@ object Debug {
                 contents = result.data.second
                 selectedCover = null
                 selectedPlayLine = null
+                selectedEpisode = null
                 playLines = emptyList()
                 log(debugSource, "搜索完成，共 ${contents.size} 条，下一页=${result.data.first}")
                 callback?.emit(contextEvent())
@@ -375,6 +390,7 @@ object Debug {
         val cover = contents.getOrNull(index) ?: return fail("数据序号无效: $index")
         selectedCover = cover
         selectedPlayLine = null
+        selectedEpisode = null
         playLines = emptyList()
         callback?.emit(contextEvent())
         getDetailed(scope, cover)
@@ -441,6 +457,7 @@ object Debug {
     private fun selectPlayLine(index: Int) {
         val line = playLines.getOrNull(index) ?: return fail("播放线路序号无效: $index")
         selectedPlayLine = line
+        selectedEpisode = null
         callback?.emit(contextEvent())
         callback?.emit(
             Event(
@@ -458,6 +475,7 @@ object Debug {
         val cover = selectedCover ?: return fail("请先选择数据")
         val line = selectedPlayLine ?: return fail("请先选择播放线路")
         val episode = line.episode.getOrNull(index) ?: return fail("剧集序号无效: $index")
+        selectedEpisode = episode
         callback?.emit(contextEvent(episode.label))
         getPlayInfo(scope, cover, line, episode)
     }
@@ -501,6 +519,50 @@ object Debug {
                     )
                 )
                 callback?.emit(Event(type = TYPE_READY, title = "调试完成，可继续选择其他数据"))
+            }.error {
+                if (isCurrent(version)) fail(it.throwable.stackTraceStr)
+            }
+        }.onError {
+            if (isCurrent(version)) fail(it.stackTraceStr)
+        }
+        tasks.add(task)
+    }
+
+    private fun getDanmakuInfo(
+        scope: CoroutineScope,
+        cartoonCover: CartoonCover,
+        playLine: PlayLine,
+        episode: Episode,
+    ) {
+        log(debugSource, "获取弹幕[${cartoonCover.title} / ${episode.label}]")
+        val version = nextRequest("正在获取弹幕")
+        val bundle = debugBundle ?: return fail("调试器尚未加载插件")
+        val source = debugSource ?: return fail("调试数据源无效")
+        val task = Coroutine.async(scope, Dispatchers.IO) {
+            bundle.getComponentProxy<DanmakuComponent>()?.getDanmakuInfo(
+                CartoonSummary(cartoonCover.id, source, cartoonCover.title),
+                playLine,
+                episode,
+            )
+        }.onSuccess { results ->
+            if (!isCurrent(version)) return@onSuccess
+            if (results == null) {
+                fail("弹幕接口不可用")
+                return@onSuccess
+            }
+            results.complete { result ->
+                if (!isCurrent(version)) return@complete
+                val count = result.data.size
+                log(debugSource, "获取弹幕完成，共 $count 条")
+                callback?.emit(
+                    Event(
+                        type = TYPE_RESULT,
+                        stage = STAGE_DANMAKU,
+                        title = "${playLine.label} / ${episode.label}",
+                        fields = linkedMapOf("弹幕条数" to count.toString()),
+                    )
+                )
+                callback?.emit(Event(type = TYPE_READY, title = "弹幕调试完成"))
             }.error {
                 if (isCurrent(version)) fail(it.throwable.stackTraceStr)
             }
@@ -612,4 +674,5 @@ object Debug {
     private const val STAGE_PLAY_LINE = "playLine"
     private const val STAGE_EPISODE = "episode"
     private const val STAGE_PLAY_INFO = "playInfo"
+    private const val STAGE_DANMAKU = "danmaku"
 }
