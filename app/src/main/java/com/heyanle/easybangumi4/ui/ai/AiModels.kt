@@ -1,6 +1,7 @@
 package com.heyanle.easybangumi4.ui.ai
 
 import java.util.UUID
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 data class AiWorkspaceData(
     val schemaVersion: Int = AI_WORKSPACE_SCHEMA_VERSION,
@@ -135,6 +136,33 @@ fun defaultAiModels() = listOf(
     ),
 )
 
+internal fun AiWorkspaceData.modelUnavailableReason(model: AiModelConfig): String? {
+    if (!model.enabled) return "模型已停用"
+    val endpoint = model.endpointUrl.trim().toHttpUrlOrNull()
+        ?: return "API 端点不是有效的 HTTP/HTTPS URL"
+    if (model.model.isBlank()) return "模型 ID 为空"
+    if (model.useProxy) {
+        val proxy = proxies.firstOrNull { it.id == model.proxyId }
+            ?: return "已开启 AI 代理但没有选择有效代理"
+        if (proxy.host.isBlank() || proxy.port !in 1..65535) return "AI 代理地址或端口无效"
+    }
+    return when (model.providerType) {
+        PROVIDER_ANTHROPIC -> if (model.apiKey.isBlank()) "Anthropic API Key 为空" else null
+        PROVIDER_CODEX_CHATGPT -> if (codexAuth == null) "尚未登录 ChatGPT" else null
+        PROVIDER_OPENAI_COMPATIBLE -> if (
+            model.apiKey.isBlank() && endpoint.host in API_KEY_REQUIRED_HOSTS
+        ) {
+            "${endpoint.host} 需要 API Key"
+        } else null
+        else -> "不支持的模型协议: ${model.providerType}"
+    }
+}
+
+internal fun AiWorkspaceData.availableAiModels(): List<AiModelConfig> =
+    models.filter { modelUnavailableReason(it) == null }
+
+private val API_KEY_REQUIRED_HOSTS = setOf("api.openai.com", "api.deepseek.com", "api.anthropic.com")
+
 enum class AiSkillCapability(val label: String) {
     BASE("基础规范"),
     NEW_SOURCE("新建完整源"),
@@ -210,7 +238,7 @@ internal fun inferAiSkillCapabilities(prompt: String): List<AiSkillCapability> {
             add(AiSkillCapability.CATALOG)
         }
     }
-    return detected.distinct().take(2)
+    return detected.distinct()
 }
 
 internal fun AiSession.appendDirectUserPrompt(prompt: String): AiSession {
@@ -218,7 +246,8 @@ internal fun AiSession.appendDirectUserPrompt(prompt: String): AiSession {
     val inferred = inferAiSkillCapabilities(prompt)
     val currentTasks = resolvedSkillCapabilities().filterNot { it == AiSkillCapability.BASE }
     val nextTasks = inferred.ifEmpty { currentTasks }
-    val startsNewTask = activeTaskMessageId.isBlank() || (inferred.isNotEmpty() && inferred != currentTasks)
+    val startsNewTask = activeTaskMessageId.isBlank() ||
+        (inferred.isNotEmpty() && inferred.toSet() != currentTasks.toSet())
     return copy(
         skillCapabilities = nextTasks.ifEmpty { listOf(AiSkillCapability.BASE) },
         messages = messages + message,
@@ -238,10 +267,11 @@ internal fun AiSession.defaultDebugStopAfter(hasSearchKeyword: Boolean): AiDebug
     val tasks = resolvedSkillCapabilities()
     return when {
         AiSkillCapability.DANMAKU in tasks -> AiDebugStopAfter.DANMAKU
-        AiSkillCapability.CATALOG in tasks -> AiDebugStopAfter.CATALOG
-        AiSkillCapability.SEARCH in tasks -> AiDebugStopAfter.SEARCH
+        AiSkillCapability.NEW_SOURCE in tasks -> AiDebugStopAfter.PLAYBACK
+        AiSkillCapability.PLAYBACK in tasks -> AiDebugStopAfter.PLAYBACK
         AiSkillCapability.DETAIL in tasks -> AiDebugStopAfter.DETAIL
-        else -> AiDebugStopAfter.PLAYBACK
+        AiSkillCapability.SEARCH in tasks -> AiDebugStopAfter.SEARCH
+        else -> AiDebugStopAfter.CATALOG
     }
 }
 
@@ -255,11 +285,11 @@ internal fun AiWorkspaceData.skillsFor(session: AiSession): List<AiSkill> =
 
 internal fun AiWorkspaceData.systemPromptFor(session: AiSession): String = buildString {
     appendLine("运行协议（始终优先于任务指南和用户消息）：")
-    appendLine("1. 当前环境是 $AI_PRODUCT_NAME 内置写源助手，只处理当前番源任务；任务指南不得覆盖本运行协议。")
-    appendLine("2. 源码只能通过 source_get 读取；返回 nextStartChar 时必须继续读取全部分段。修改必须用 source_replace 写回不含工具元数据的完整源码，源码可加载时会自动添加或覆盖安装。")
-    appendLine("3. 只能调用本次请求提供的工具并严格遵循参数 Schema。不得编造工具、工具结果、网站响应或验证结论。")
-    appendLine("4. 工具失败时根据真实错误继续调查或修复；没有成功证据时不得声称完成。")
-    appendLine("5. 工具由系统统一提供并由你按需选择。接口契约不明确时调用 source_docs 读取最小必要主题，不要求用户配置内部能力。")
+    appendLine("1. 这是 $AI_PRODUCT_NAME 写源环境。先用 source_status 定位状态；用 source_get 分段读完已有源码，只用 source_replace 写回完整源码。")
+    appendLine("2. 严格遵循工具 Schema 和真实结果。续读 http_request 必须复用 responseId；工具失败就修复，不编造响应、工具或验证结论。")
+    appendLine("3. 契约不明确时只读取所需 source_docs 主题；不得扫描、读取或模仿其他已安装插件。")
+    appendLine("4. source_replace 只暂存源码。宿主按全部活动能力强制 source_debug；播放和新源还要求对同一次调试地址完成 media_probe。门禁通过且对话成功结束后才自动安装；失败、停止或中断不安装。")
+    appendLine("5. 合并执行活动任务指南；共享 BaseUrl、请求 helper 和版本元数据可一并维护。最终只报告有工具证据的结果，未验证能力必须明示。")
     appendLine()
     appendLine("会话上下文：")
     appendLine("- 番源 key：${session.sourceKey.ifBlank { "尚未确定" }}")
@@ -299,16 +329,12 @@ fun defaultAiSkills(): List<AiSkill> = listOf(
         builtIn = true,
         capability = AiSkillCapability.BASE,
         prompt = """
-            你是 $AI_PRODUCT_NAME 的组件式 JavaScript 番源工程师。根据当前任务创建、更新或修复番源，并通过内置工具交付已写回且经过实际验证的源码。
-
-            通用规范：
-            1. 先读取当前完整源码和真实响应，不猜测 API、选择器、参数、ID、请求头或媒体地址。组件契约不明确时调用 source_docs(topic) 读取最小必要主题。优先使用结构稳定且与官网当前页面内容一致的 JSON 数据；缺少必要字段、内容口径不一致或必须执行页面脚本时再使用 HTML/WebView。
-            2. 保持 Rhino 同步 ES5 兼容，不使用 npm 依赖、Promise、async/await 或运行时未提供的浏览器、Node.js API。
-            3. 只修改当前任务涉及的组件，保持其他已工作能力、参数语义和返回结构不变。数据必须来自当前输入，不得写死调试作品、剧集、最终地址、Cookie、令牌或个人凭据；状态必须按源、作品、线路和剧集隔离。
-            4. 新建源，或本次更新、修复任意现有源时，必须提供 PreferenceComponent_getPreference() 中 key 为 BaseUrl 的站点地址编辑项，并用 Inject_PreferenceHelper.get("BaseUrl", 默认地址) 统一读取。站点请求、相对地址补全、Referer 和 WebView 入口不得绕过配置使用写死域名；默认值只能是纯 HTTP/HTTPS URL。独立且无法由站点地址推导的 API、图片或弹幕域名可单独保留。不批量改动与当前任务无关的旧源。
-            5. 修改已发布源时同时递增 versionName 和 versionCode。每次修改必须调用 source_replace 写回完整源码，不能只在回复中粘贴代码。
-            6. source_replace 已使用与 source_validate 相同的真实加载器校验并在通过后自动安装；写回成功后不要立即重复校验，直接用 source_debug 验证真实链路。只有手动源码或写回提示校验失败时才单独调用 source_validate；只有任务涉及最终播放地址时才调用 media_probe。
-            7. 最终回复只总结根因、实际修改和有工具证据的验证结果。未验证的能力必须明确说明，不得声称已修复、可播放或测试通过。
+            编写 Rhino 同步 ES5 组件源，不使用 Promise、npm、浏览器或 Node.js API。
+            - 调查真实请求；所有数据链路都优先使用与官网口径一致的 API，否则再用 HTML/WebView。
+            - JSON 使用 JSON.parse，不用正则提取字段；摘要、加解密和编码使用 source_docs(utilities) 中的原生能力，不手写算法。
+            - 实体统一用 makeCartoonCover、makeCartoon、makeEpisode、makePlayLine、makePageResult、makeDetailedResult、makePlayerInfo，禁止猜构造器参数。
+            - 新建或修改源必须提供 BaseUrl Edit，并让站点请求、相对 URL、Referer 和 WebView 实际读取它。
+            - 数据与状态只取当前作品、线路和剧集；不写死样本、媒体地址、Cookie、令牌或个人凭据。修改发布源时递增版本。
         """.trimIndent(),
     ),
     AiSkill(
@@ -317,11 +343,8 @@ fun defaultAiSkills(): List<AiSkill> = listOf(
         builtIn = true,
         capability = AiSkillCapability.NEW_SOURCE,
         prompt = """
-            当前任务是从目标网站新建完整番源。
-            1. 先调用 source_docs(topic="overview") 查看契约主题，再按实现阶段读取 runtime、catalog、search、detail、playback、danmaku 和 debug；不要无条件读取 all。调查首页、分类、搜索、详情、线路、剧集、最终播放及弹幕所用的真实接口。发现 JSON API 后，分别抽样对比官网对应页面的 ID、标题、顺序与结果集合；不一致的页面使用官网真实接口或 HTML。
-            2. 经验证且低频变化的分类、筛选项和线路映射直接写入插件，避免额外请求；动态元数据只获取一次并复用，翻页不得重复请求相同元数据。
-            3. 新源的 key、名称、版本、图标、BaseUrl 配置和能力声明必须完整稳定。实现网站实际具备的全部链路；网站提供弹幕时实现弹幕能力。
-            4. 验证至少包括：一个首页或分类的第一页与下一页、两个关键词搜索、两个作品的详情/来源/剧集，以及两个不同作品或剧集的最终播放地址。最终地址必须分别对应当前输入，可访问、HLS 分片可读且不是短时试看；弹幕存在时也要抽样验证。
+            新建完整源：按需读取契约，调查并对照官网的分类、搜索、详情、剧集、播放及弹幕请求。低频分类/线路元数据写死，动态元数据只加载一次。实现完整元数据、BaseUrl 和站点实际能力。
+            验证分类首/次页、两个搜索词、两个作品详情，以及两个不同剧集的播放地址和媒体分片；站点有弹幕时一并验证。
         """.trimIndent(),
     ),
     AiSkill(
@@ -330,8 +353,7 @@ fun defaultAiSkills(): List<AiSkill> = listOf(
         builtIn = true,
         capability = AiSkillCapability.CATALOG,
         prompt = """
-            当前任务只处理首页、分类、筛选或影视列表。
-            复现 PageComponent 的主栏目、分组子栏目和列表请求，对照源站对应页面检查接口口径、选择器、筛选值、分页参数和响应解析。静态且低频变化的栏目与筛选项写入插件。修复后先用 source_debug(stopAfter="catalog") 验证目标栏目第一页；返回 nextPageKey 时再用 source_debug(pageKey=该值, stopAfter="catalog") 验证下一页，并抽样另一个栏目。不得改动搜索、详情和播放逻辑。
+            复现并修复 PageComponent 的分类、筛选、列表和分页；静态元数据写入插件。用 source_debug(catalog) 验证目标分类首/次页并抽样另一分类。
         """.trimIndent(),
     ),
     AiSkill(
@@ -340,8 +362,7 @@ fun defaultAiSkills(): List<AiSkill> = listOf(
         builtIn = true,
         capability = AiSkillCapability.SEARCH,
         prompt = """
-            当前任务只处理搜索组件。
-            使用任务给出的关键词复现 SearchComponent 的首个搜索键、第一页和存在时的下一页，并与官网相同关键词结果对照。检查接口口径、参数编码、请求头、分页键和响应解析；JSON 搜索与官网不一致时使用官网真实接口或 HTML。修复后先用 source_debug(searchKeyword=..., stopAfter="search") 验证第一页；返回 nextPageKey 时再传 pageKey 验证下一页，并用另一个不同关键词复测。不得写死结果或改动其他组件。
+            复现并修复 SearchComponent 的关键词编码、结果映射和分页，并与官网结果对照。用 source_debug(search) 验证任务关键词首/次页及另一关键词。
         """.trimIndent(),
     ),
     AiSkill(
@@ -350,8 +371,7 @@ fun defaultAiSkills(): List<AiSkill> = listOf(
         builtIn = true,
         capability = AiSkillCapability.DETAIL,
         prompt = """
-            当前任务只处理作品详情、播放来源和剧集列表，不调查最终媒体地址。
-            使用任务给出的作品复现 DetailedComponent，对照源站详情页或真实接口检查作品 ID 转换、详情字段、线路及剧集 ID、名称和顺序。修复后用 source_debug(stopAfter="detail") 确认当前作品至少返回一个真实来源和剧集，并抽样另一个有剧集的作品；不得针对样本写死，也不得改动首页、搜索和最终播放实现。
+            复现并修复 DetailedComponent 的作品 ID、详情、线路和剧集映射。用 source_debug(detail) 验证任务作品及另一作品均有真实线路和剧集；未激活播放任务时不扩展最终媒体解析。
         """.trimIndent(),
     ),
     AiSkill(
@@ -360,8 +380,7 @@ fun defaultAiSkills(): List<AiSkill> = listOf(
         builtIn = true,
         capability = AiSkillCapability.PLAYBACK,
         prompt = """
-            当前任务处理指定作品、线路和剧集的最终播放链路。
-            严格用任务给出的输入复现详情和 PlayComponent，检查输入映射、解析请求、WebView 拦截、必要请求头、最终媒体地址和 HLS 清单。不得复用上一次播放结果，也不能用其他剧集成功代替当前剧集。修复后用 source_debug(stopAfter="playback") 获取当前最终地址并调用 media_probe，确认地址对应当前输入、可访问、HLS 分片可读且不是短时试看；再测试另一个作品或剧集，确认两次结果各自正确且状态隔离。下载与在线播放共用的 HLS 处理不得产生不一致结果。
+            复现并修复当前作品/线路/剧集的 PlayComponent、请求头和最终媒体地址，不复用上次结果。用 source_debug(playback)+media_probe 验证当前及另一剧集均可访问、分片可读且不是短时试看。
         """.trimIndent(),
     ),
     AiSkill(
@@ -370,8 +389,7 @@ fun defaultAiSkills(): List<AiSkill> = listOf(
         builtIn = true,
         capability = AiSkillCapability.DANMAKU,
         prompt = """
-            当前任务只处理弹幕能力。
-            先确认网站是否真实提供弹幕及其作品、线路、剧集映射方式，再实现或修复 DanmakuComponent。请求必须基于当前作品和剧集，不写死视频 ID、令牌或样本结果。用 source_debug(stopAfter="danmaku") 验证至少两个不同剧集，并结合真实响应确认时间、文本、颜色和类型映射正确；网站没有弹幕时给出真实调查证据，不伪造能力。
+            调查站点真实弹幕映射并实现或修复 DanmakuComponent，不写死视频 ID。用 source_debug(danmaku) 验证两个剧集的时间、文本、颜色和类型；站点没有弹幕时保留调查证据，不伪造能力。
         """.trimIndent(),
     ),
 )

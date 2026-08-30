@@ -60,23 +60,131 @@ class JsSource(
                     String(content || "")
                 );
             }
+
+            function __ebgToJavaString(value) {
+                return new Packages.java.lang.String(value == null ? "" : String(value));
+            }
+
+            function __ebgToNullableJavaString(value) {
+                return value == null ? null : __ebgToJavaString(value);
+            }
+
+            function __ebgToJavaInteger(value, fallback) {
+                var number = parseInt(value, 10);
+                if (isNaN(number)) {
+                    number = parseInt(fallback, 10);
+                }
+                if (isNaN(number)) {
+                    number = 0;
+                }
+                return new Packages.java.lang.Integer(number);
+            }
+
+            function __ebgToJavaArrayList(values) {
+                if (values instanceof Packages.java.util.ArrayList) {
+                    return values;
+                }
+                var result = new ArrayList();
+                if (values == null) {
+                    return result;
+                }
+                for (var i = 0; i < values.length; i++) {
+                    result.add(values[i]);
+                }
+                return result;
+            }
+
+            function __ebgToJavaStringArrayList(values) {
+                var result = new ArrayList();
+                if (values == null) {
+                    return result;
+                }
+                for (var i = 0; i < values.length; i++) {
+                    result.add(__ebgToJavaString(values[i]));
+                }
+                return result;
+            }
+
+            function __ebgToBoolean(value, fallback) {
+                if (value == null) return fallback;
+                if (typeof value === "string") return value.toLowerCase() === "true";
+                return Boolean(value);
+            }
+
+            function __ebgToNumber(value, fallback) {
+                var number = Number(value);
+                return isNaN(number) ? fallback : number;
+            }
+
+            function makeEpisode(map) {
+                return new Episode(
+                    __ebgToJavaString(map.id),
+                    __ebgToJavaString(map.label),
+                    __ebgToJavaInteger(map.order, 0)
+                );
+            }
+
+            function makePlayLine(map) {
+                return new PlayLine(
+                    __ebgToJavaString(map.id),
+                    __ebgToJavaString(map.label),
+                    __ebgToJavaArrayList(map.episodes)
+                );
+            }
+
+            function makePageResult(nextKey, items) {
+                var javaNextKey = nextKey == null ? null : __ebgToJavaInteger(nextKey, 0);
+                return new Pair(javaNextKey, __ebgToJavaArrayList(items));
+            }
+
+            function makeDetailedResult(cartoon, playLines) {
+                return new Pair(cartoon, __ebgToJavaArrayList(playLines));
+            }
+
+            function makePlayerInfo(map) {
+                var player = new PlayerInfo(
+                    __ebgToJavaInteger(map.decodeType, PlayerInfo.DECODE_TYPE_OTHER),
+                    __ebgToJavaString(map.uri)
+                );
+                if (map.headers != null) {
+                    var headers = new HashMap();
+                    for (var key in map.headers) {
+                        if (Object.prototype.hasOwnProperty.call(map.headers, key)) {
+                            headers.put(__ebgToJavaString(key), __ebgToJavaString(map.headers[key]));
+                        }
+                    }
+                    player.header = headers;
+                }
+                var options = map.hlsOptions;
+                if (options != null) {
+                    var hlsOptions = player.getHlsOptions();
+                    if (options.segmentPayload != null) hlsOptions.segmentPayload = __ebgToJavaString(options.segmentPayload);
+                    if (options.filterMinorityHosts != null) hlsOptions.filterMinorityHosts = __ebgToBoolean(options.filterMinorityHosts, true);
+                    if (options.minorityHostThreshold != null) hlsOptions.minorityHostThreshold = __ebgToNumber(options.minorityHostThreshold, 0.15);
+                    if (options.maxAdDurationSeconds != null) hlsOptions.maxAdDurationSeconds = __ebgToNumber(options.maxAdDurationSeconds, 180);
+                    if (options.blockedSegmentRegex != null) {
+                        hlsOptions.blockedSegmentRegex = __ebgToJavaStringArrayList(options.blockedSegmentRegex);
+                    }
+                }
+                return player;
+            }
             
             function makeCartoonCover(map) {
-                var id = map.id;
+                var id = __ebgToJavaString(map.id);
                 var source = Inject_Source.key;
-                var url = map.url;
-                var title = map.title;
-                var intro = map.intro;
-                var cover = map.cover;
+                var url = __ebgToJavaString(map.url);
+                var title = __ebgToJavaString(map.title);
+                var intro = __ebgToNullableJavaString(map.intro);
+                var cover = __ebgToNullableJavaString(map.cover);
                 return new CartoonCoverImpl(id, source, url, title, intro, cover);
             }
             
             function makeCartoon(map) {
-                var id = map.id;
+                var id = __ebgToJavaString(map.id);
                 var source = Inject_Source.key;
-                var url = map.url;
+                var url = __ebgToJavaString(map.url);
                 
-                var title = map.title;
+                var title = __ebgToJavaString(map.title);
                 
                 
                 var genre = null;
@@ -99,25 +207,25 @@ class JsSource(
                 }
                 
                 if (map.genre != undefined) {
-                    genre = map.genre;
+                    genre = __ebgToJavaString(map.genre);
                 }
                 
               
                 if (map.cover != undefined) {
-                    coverUrl = map.cover;
+                    coverUrl = __ebgToJavaString(map.cover);
                 }
                 
                 if (map.intro != undefined) {
-                    intro = map.intro;
+                    intro = __ebgToJavaString(map.intro);
                 }
                 
                
                 if (map.description != undefined) {
-                    description = map.description;
+                    description = __ebgToJavaString(map.description);
                 }
                 
                 if (map.updateStrategy != undefined) {
-                    updateStrategy = map.updateStrategy;
+                    updateStrategy = __ebgToJavaInteger(map.updateStrategy, 0);
                 }
                 
                 if (map.isUpdate != undefined) {
@@ -125,7 +233,7 @@ class JsSource(
                 }
                 
                 if (map.status != undefined) {
-                    status = map.status;
+                    status = __ebgToJavaInteger(map.status, 0);
                 }
                 
                 return new CartoonImpl(

@@ -62,6 +62,7 @@ import com.heyanle.easybangumi4.ui.ai.AiModelSelectionDialog
 import com.heyanle.easybangumi4.ui.ai.AiWorkspaceStore
 import com.heyanle.easybangumi4.ui.ai.AI_PRODUCT_NAME
 import com.heyanle.easybangumi4.ui.ai.AiSkillCapability
+import com.heyanle.easybangumi4.ui.ai.availableAiModels
 import com.heyanle.easybangumi4.ui.cartoon_play.cartoon_recorded.CartoonRecorded
 import com.heyanle.easybangumi4.ui.cartoon_play.view_model.CartoonPlayViewModel
 import com.heyanle.easybangumi4.ui.cartoon_play.view_model.CartoonPlayViewModelFactory
@@ -312,7 +313,7 @@ fun CartoonPlay(
                         askAiRepairPlayList = null
                         val existing = AiWorkspaceStore.sourceSession(source, extension)
                         val canReuseSession = existing != null &&
-                            aiWorkspace.models.any { it.id == existing.modelId }
+                            aiWorkspace.availableAiModels().any { it.id == existing.modelId }
                         if (canReuseSession) {
                             val session = AiWorkspaceStore.enqueueSourceTask(
                                 source,
@@ -337,7 +338,7 @@ fun CartoonPlay(
 
         repairAwaitingModel?.let { request ->
             AiModelSelectionDialog(
-                models = aiWorkspace.models.filter { it.enabled },
+                models = aiWorkspace.availableAiModels(),
                 onDismiss = { repairAwaitingModel = null },
                 onSelected = { model ->
                     val session = AiWorkspaceStore.enqueueSourceTask(

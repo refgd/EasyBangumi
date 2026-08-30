@@ -74,11 +74,11 @@ function PageComponent_getContent(mainTab, subTab, key) {
         var curPage = resp.page ? resp.page: 0
         var pageCount = resp.pagecount ? resp.pagecount: 0
         if (curPage < pageCount){
-            nextKey = new java.lang.Integer(parseInt(curPage) + 1);
+            nextKey = parseInt(curPage, 10) + 1;
         }
     }
 
-    return new Pair(nextKey, res);
+    return makePageResult(nextKey, res);
 }
 
 // Hook DetailedComponent ========================================
@@ -126,18 +126,22 @@ function PageComponent_getContent(mainTab, subTab, key) {
                     return
                 }
 
-                var playLine = new PlayLine('p'+ind, playlistNames[ind], new ArrayList());
+                var episodes = new ArrayList();
                 list.split("#").forEach(function(part, order) {
                     var names = part.split('$');
-                    playLine.episode.add(new Episode(names[1], names[0], order));
+                    episodes.add(makeEpisode({ id: names[1], label: names[0], order: order }));
                 });
-                
-                playLineList.add(playLine);
+
+                playLineList.add(makePlayLine({
+                    id: 'p' + ind,
+                    label: playlistNames[ind],
+                    episodes: episodes
+                }));
             });
 
-        return new Pair(cartoon, playLineList);
+        return makeDetailedResult(cartoon, playLineList);
     }
-    return new Pair(null, null);
+    throw new ParserException("详情接口未返回目标作品: " + summary.id);
  }
 
  // Hook SearchComponent ========================================
@@ -165,11 +169,11 @@ function PageComponent_getContent(mainTab, subTab, key) {
         var curPage = resp.page ? resp.page: 0
         var pageCount = resp.pagecount ? resp.pagecount: 0
         if (curPage < pageCount){
-            nextPage = new java.lang.Integer(parseInt(curPage) + 1);
+            nextPage = parseInt(curPage, 10) + 1;
         }
     }
 
-    return new Pair(nextPage, res);
+    return makePageResult(nextPage, res);
  }
 
  // Hook PlayComponent ========================================
@@ -183,7 +187,10 @@ function PlayComponent_getPlayInfo(summary, playLine, episode) {
         uri = MainUtil.removeAd(uri);
     }
 
-    return new PlayerInfo(type, uri);
+    return makePlayerInfo({
+        decodeType: type,
+        uri: uri
+    });
 }
 
 

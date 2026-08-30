@@ -47,7 +47,7 @@ class SourceWebSocket(
          emit(
              Debug.Event(
                  type = "hello",
-                 title = "EasyBangumi source debugger",
+                title = "纯纯看看 source debugger",
                  fields = linkedMapOf(
                      "protocolVersion" to PROTOCOL_VERSION.toString(),
                      "capabilities" to "search,stableSelector,paging,requestId,debugCapture,install,localIcon"
@@ -71,9 +71,7 @@ class SourceWebSocket(
      ) {
          outgoing.close()
          cancel()
-         if (Debug.callback === this) {
-             Debug.cancelDebug(true)
-         }
+         Debug.endSession(this)
      }
 
      override fun onMessage(message: NanoWSD.WebSocketFrame) {
@@ -101,18 +99,20 @@ class SourceWebSocket(
                                  )
                              )
                          )
-                     } else if(tag == "debug" && key != null){
-                         Debug.cancelDebug(true)
-                         when(val extension = JSExtensionInnerLoader(key, jsRuntime).load()) {
+                      } else if(tag == "debug" && key != null){
+                          when(val extension = JSExtensionInnerLoader(key, jsRuntime).load()) {
                                  is ExtensionInfo.InstallError -> {
                                      emit(Debug.Event(type = "error", title = "插件加载失败", message = extension.errMsg, errorCode = "extension_load_failed"))
                                      close(NanoWSD.WebSocketFrame.CloseCode.NormalClosure, "调试结束", false)
                                      return@launch
-                                 }
-                                 is ExtensionInfo.Installed -> {
-                                     Debug.callback = this@SourceWebSocket
-                                     Debug.startDebug(this, extension)
-                                 }
+                                  }
+                                  is ExtensionInfo.Installed -> {
+                                      if (!Debug.beginSession(this@SourceWebSocket)) {
+                                          emit(Debug.Event(type = "error", title = "调试器忙", message = "调试器正在被其他会话使用，请稍后重试", errorCode = "debugger_busy"))
+                                      } else {
+                                          Debug.startDebug(this, extension)
+                                      }
+                                  }
                          }
                      } else if (tag == "install" && key != null) {
                          installSource(key, debugBean["icon"])
@@ -232,9 +232,7 @@ class SourceWebSocket(
      }
 
      override fun onException(exception: IOException?) {
-         if (Debug.callback === this) {
-             Debug.cancelDebug(true)
-         }
+         Debug.endSession(this)
      }
 
     override fun printLog(state: Int, msg: String) {

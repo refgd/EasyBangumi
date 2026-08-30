@@ -36,7 +36,7 @@ fun AiModelSelectionDialog(
             LazyColumn(Modifier.heightIn(max = 360.dp)) {
                 if (models.isEmpty()) {
                     item {
-                        Text("没有已启用的模型，请先在 AI 写源的模型管理中启用或添加模型。")
+                        Text("没有可用模型，请先在模型管理中完成端点、凭据、登录或代理配置。")
                     }
                 }
                 items(models, key = { it.id }) { model ->

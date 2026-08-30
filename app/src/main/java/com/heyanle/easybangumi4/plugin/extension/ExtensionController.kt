@@ -50,6 +50,7 @@ class ExtensionController(
 
     companion object {
         private const val TAG = "ExtensionController"
+        private const val DEBUG_EXTENSION_KEY_SUFFIX = ".__debug__"
 
     }
 
@@ -190,19 +191,29 @@ class ExtensionController(
         source: String,
         iconBytes: ByteArray? = null,
     ): Exception? {
+        if (extensionKey.endsWith(DEBUG_EXTENSION_KEY_SUFFIX)) {
+            return IOException("拒绝安装调试番源 key: $extensionKey")
+        }
         val error = appendJsExtensionStream(
             displayName,
             ByteArrayInputStream(source.toByteArray(Charsets.UTF_8)),
         )
-        if (error == null && iconBytes != null) {
+        if (error != null) return error
+        if (!hasInstalledJsExtension(extensionKey)) {
+            return IOException("插件写入后未在番源管理中加载，请重试或手动安装")
+        }
+        if (iconBytes != null) {
             return runCatching {
                 installLocalIcon(extensionKey, iconBytes)
                 jsExtensionProvider.scanFolder()
                 jsExtensionProvider.awaitScanFolder()
+                if (!hasInstalledJsExtension(extensionKey)) {
+                    throw IOException("插件图标更新后未在番源管理中加载，请重试或手动安装")
+                }
                 null
             }.getOrElse { it as? Exception ?: IOException(it) }
         }
-        return error
+        return null
     }
 
     suspend fun exportJsExtensionPackage(sourceKey: String, targetUri: Uri): Exception? =
@@ -375,6 +386,11 @@ class ExtensionController(
             File(jsExtensionFolder, "$key.ebg.jsc").isFile
     }
 
+    private fun hasInstalledJsExtension(key: String): Boolean {
+        return state.value.extensionInfoMap.values
+            .filterIsInstance<ExtensionInfo.Installed>()
+            .any { info -> info.key == key && info.loadType == ExtensionInfo.TYPE_JS_FILE }
+    }
 
     fun appendExtensionPath(path: String, callback: ((Exception?) -> Unit)? = null) {
         scope.launch {

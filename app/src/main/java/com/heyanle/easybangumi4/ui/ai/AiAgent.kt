@@ -32,10 +32,92 @@ data class AiAgentEvent(
     val replaceLatest: Boolean = false,
 )
 
-class AiAgent(
-    extensionController: ExtensionController,
+internal class AiStreamGuard(private val provider: String) {
+    private var completed = false
+
+    fun markComplete() {
+        completed = true
+    }
+
+    fun requireComplete() {
+        check(completed) { "$provider 流式响应中断：未收到完成标记，请重试" }
+    }
+}
+
+internal fun parseAiSseEvent(provider: String, data: String): JsonObject = try {
+    JsonParser.parseString(data).asJsonObject
+} catch (error: Throwable) {
+    throw IllegalStateException("$provider 返回了无效的流式事件", error)
+}
+
+internal class AiToolRoundBudget(
+    private val baseRounds: Int = 32,
+    private val maxRounds: Int = 96,
+    private val maxStalledRounds: Int = 6,
 ) {
-    private val sourceTools = AiSourceToolExecutor(extensionController)
+    private val seenToolResults = linkedSetOf<String>()
+    private var roundCount = 0
+    private var stalledRounds = 0
+
+    val displayMaxRounds: Int
+        get() = maxRounds
+
+    fun nextRoundOrNull(): Int? {
+        if (roundCount >= maxRounds) return null
+        if (roundCount >= baseRounds && stalledRounds >= maxStalledRounds) return null
+        return roundCount++
+    }
+
+    fun recordToolResult(name: String, result: AiAgentToolResult) {
+        val stableContent = when (name) {
+            "http_request" -> result.content.replaceFirst(HTTP_RESPONSE_ID, "responseId=<snapshot>")
+            "source_debug" -> result.content.replace(DEBUG_LOG_TIME, "[time]")
+            else -> result.content
+        }
+        val fingerprint = buildString {
+            append(name)
+            append('\n')
+            append(result.isError)
+            append('\n')
+            append(stableContent.length)
+            append(':')
+            append(stableContent.hashCode())
+        }
+        if (seenToolResults.add(fingerprint)) {
+            stalledRounds = 0
+        } else {
+            stalledRounds++
+        }
+    }
+
+    fun recordPendingPrompts(count: Int) {
+        if (count > 0) stalledRounds = 0
+    }
+
+    fun exhaustedMessage(): String =
+        if (roundCount >= maxRounds) {
+            "模型连续调用工具已达到 $maxRounds 轮上限，请缩小任务后重试"
+        } else {
+            "模型在 $roundCount 轮工具调用后连续重复相同结果，请补充更具体目标或调整提示后重试"
+        }
+
+    companion object {
+        private val HTTP_RESPONSE_ID = Regex("(?m)^responseId=[^\\r\\n]+")
+        private val DEBUG_LOG_TIME = Regex("\\[\\d{2}:\\d{2}\\.\\d{3}]")
+    }
+}
+
+internal data class AiAgentToolResult(
+    val content: String,
+    val isError: Boolean,
+) {
+    val modelContent: String
+        get() = if (isError) "[tool_error]\n$content" else content
+}
+
+class AiAgent(
+    private val extensionController: ExtensionController,
+) {
     private var cachedProxyConfig: AiProxyConfig? = null
     private var cachedAiClient: OkHttpClient? = null
 
@@ -44,118 +126,138 @@ class AiAgent(
         onProgress: (String) -> Unit = {},
         onEvent: (AiAgentEvent) -> Unit = {},
         consumePendingPrompts: suspend () -> List<String> = { emptyList() },
-    ): Result<String> = try {
-        withContext(Dispatchers.IO) {
-        val result = runCatching {
-            reportProgress(onProgress, onEvent, "正在准备会话和模型...")
-            var session = AiWorkspaceStore.session(sessionId) ?: error("会话不存在")
-            val workspace = AiWorkspaceStore.state.value
-            val model = workspace.models.firstOrNull { it.id == session.modelId && it.enabled }
-                ?: error("当前会话选择的模型不存在或已停用，请重新选择模型")
-            if (model.endpointUrl.isBlank() || model.model.isBlank()) error("模型 API 端点和模型名称不能为空")
-            val apiMessages = JsonArray()
-            val systemPrompt = workspace.systemPromptFor(session)
-            val tools = aiToolDefinitions(AI_SOURCE_TOOL_NAMES)
-            val proxy = if (model.useProxy) {
-                workspace.proxies.firstOrNull { it.id == model.proxyId }
-                    ?: error("模型已开启 AI 代理，但所选代理不存在，请编辑模型")
-            } else null
-            if (model.providerType == PROVIDER_CODEX_CHATGPT) {
-                return@runCatching replyCodex(
-                    model,
-                    proxy,
-                    systemPrompt,
-                    session,
-                    onProgress,
-                    onEvent,
-                    consumePendingPrompts,
-                    tools,
-                )
-            }
-            if (model.providerType == PROVIDER_ANTHROPIC) {
-                if (model.apiKey.isBlank()) error("Anthropic API Key 不能为空")
-                return@runCatching replyAnthropic(
-                    model,
-                    proxy,
-                    systemPrompt,
-                    session,
-                    onProgress,
-                    onEvent,
-                    consumePendingPrompts,
-                    tools,
-                )
-            }
-            apiMessages.add(message("system", systemPrompt))
-            session.contextMessages().forEach { apiMessages.add(message(it.role, it.content)) }
-
-            repeat(MAX_TOOL_ROUNDS) { round ->
-                reportProgress(onProgress, onEvent, "第 ${round + 1} 轮：等待模型响应...")
-                val response = request(model, proxy, apiMessages, tools, onEvent)
-                val assistant = response.getAsJsonArray("choices")?.firstOrNull()?.asJsonObject
-                    ?.getAsJsonObject("message") ?: error("模型响应缺少 choices[0].message")
-                val content = assistant.get("content")?.takeUnless { it.isJsonNull }?.asString.orEmpty()
-                val reasoning = assistant.get("reasoning_content")
-                    ?.takeUnless { it.isJsonNull }
-                    ?.asString
-                    .orEmpty()
-                if (reasoning.isNotBlank()) reportReasoning(onEvent, reasoning)
-                val toolCalls = assistant.getAsJsonArray("tool_calls")
-                if (toolCalls == null || toolCalls.size() == 0) {
-                    val finalText = content.ifBlank { "模型未返回文本" }
-                    val pending = consumePendingPrompts()
-                    if (pending.isNotEmpty()) {
-                        apiMessages.add(assistant.deepCopy())
-                        pending.forEach { apiMessages.add(message("user", it)) }
-                        saveIntermediateReply(sessionId, content, pending)
-                        session = AiWorkspaceStore.session(sessionId) ?: session
-                        reportProgress(onProgress, onEvent, "已接收 ${pending.size} 条追加消息，继续处理...")
-                        return@repeat
+    ): Result<String> {
+        val sourceTools = AiSourceToolExecutor(extensionController)
+        return try {
+            withContext(Dispatchers.IO) {
+                val result = runCatching {
+                    reportProgress(onProgress, onEvent, "正在准备会话和模型...")
+                    var session = AiWorkspaceStore.session(sessionId) ?: error("会话不存在")
+                    val workspace = AiWorkspaceStore.state.value
+                    val model = workspace.models.firstOrNull { it.id == session.modelId }
+                        ?: error("当前会话选择的模型不存在或已停用，请重新选择模型")
+                    workspace.modelUnavailableReason(model)?.let { error("模型不可用: $it") }
+                    val apiMessages = JsonArray()
+                    val systemPrompt = workspace.systemPromptFor(session)
+                    val tools = aiToolDefinitions(AI_SOURCE_TOOL_NAMES)
+                    val proxy = if (model.useProxy) {
+                        workspace.proxies.firstOrNull { it.id == model.proxyId }
+                            ?: error("模型已开启 AI 代理，但所选代理不存在，请编辑模型")
+                    } else null
+                    if (model.providerType == PROVIDER_CODEX_CHATGPT) {
+                        return@runCatching replyCodex(
+                            model,
+                            proxy,
+                            systemPrompt,
+                            session,
+                            sourceTools,
+                            onProgress,
+                            onEvent,
+                            consumePendingPrompts,
+                            tools,
+                        )
                     }
-                    session = AiWorkspaceStore.session(sessionId) ?: session
-                    session = session.copy(messages = session.messages + AiMessage(role = "assistant", content = finalText))
-                    AiWorkspaceStore.saveSession(session)
-                    return@runCatching finalText
-                }
+                    if (model.providerType == PROVIDER_ANTHROPIC) {
+                        if (model.apiKey.isBlank()) error("Anthropic API Key 不能为空")
+                        return@runCatching replyAnthropic(
+                            model,
+                            proxy,
+                            systemPrompt,
+                            session,
+                            sourceTools,
+                            onProgress,
+                            onEvent,
+                            consumePendingPrompts,
+                            tools,
+                        )
+                    }
+                    apiMessages.add(message("system", systemPrompt))
+                    session.contextMessages().forEach { apiMessages.add(message(it.role, it.content)) }
 
-                apiMessages.add(assistant.deepCopy())
-                toolCalls.forEach { element ->
-                    val call = element.asJsonObject
-                    val callId = call.get("id")?.asString.orEmpty()
-                    val function = call.getAsJsonObject("function")
-                    val name = function?.get("name")?.asString.orEmpty()
-                    Log.d(TAG, "tool round=${round + 1}/$MAX_TOOL_ROUNDS name=$name")
-                    reportProgress(onProgress, onEvent, "第 ${round + 1} 轮：${toolProgressText(name)}")
-                    val toolResult = executeToolCall(
-                        name,
-                        function?.get("arguments")?.asString ?: "{}",
-                        session,
-                    )
-                    reportToolResult(onEvent, name, toolResult.content)
-                    session = AiWorkspaceStore.session(sessionId) ?: session
-                    apiMessages.add(JsonObject().apply {
-                        addProperty("role", "tool")
-                        addProperty("tool_call_id", callId)
-                        addProperty("content", toolResult.modelContent.take(MAX_TOOL_OUTPUT_CHARS))
-                    })
+                    val budget = AiToolRoundBudget()
+                    while (true) {
+                        val round = budget.nextRoundOrNull() ?: break
+                        reportProgress(onProgress, onEvent, "第 ${round + 1} 轮：等待模型响应...")
+                        val response = request(model, proxy, apiMessages, tools, onEvent)
+                        val assistant = response.getAsJsonArray("choices")?.firstOrNull()?.asJsonObject
+                            ?.getAsJsonObject("message") ?: error("模型响应缺少 choices[0].message")
+                        val content = assistant.get("content")?.takeUnless { it.isJsonNull }?.asString.orEmpty()
+                        val reasoning = assistant.get("reasoning_content")
+                            ?.takeUnless { it.isJsonNull }
+                            ?.asString
+                            .orEmpty()
+                        if (reasoning.isNotBlank()) reportReasoning(onEvent, reasoning)
+                        val toolCalls = assistant.getAsJsonArray("tool_calls")
+                        if (toolCalls == null || toolCalls.size() == 0) {
+                            val finalText = content.ifBlank { "模型未返回文本" }
+                            val pending = consumePendingPrompts()
+                            if (pending.isNotEmpty()) {
+                                apiMessages.add(assistant.deepCopy())
+                                pending.forEach { apiMessages.add(message("user", it)) }
+                                saveIntermediateReply(sessionId, content, pending)
+                                session = AiWorkspaceStore.session(sessionId) ?: session
+                                budget.recordPendingPrompts(pending.size)
+                                reportProgress(onProgress, onEvent, "已接收 ${pending.size} 条追加消息，继续处理...")
+                                continue
+                            }
+                            val installBlocker = sourceTools.pendingInstallBlocker
+                            if (installBlocker != null) {
+                                apiMessages.add(assistant.deepCopy())
+                                apiMessages.add(message("user", installGuardInstruction(installBlocker)))
+                                budget.recordToolResult("install_guard", AiAgentToolResult(installBlocker, true))
+                                reportInstallGuard(installBlocker, onProgress, onEvent)
+                                continue
+                            }
+                            installPendingSource(sourceTools, onProgress, onEvent)
+                            session = AiWorkspaceStore.appendSessionMessages(
+                                sessionId,
+                                listOf(AiMessage(role = "assistant", content = finalText)),
+                            ) ?: session
+                            return@runCatching finalText
+                        }
+
+                        apiMessages.add(assistant.deepCopy())
+                        toolCalls.forEach { element ->
+                            val call = element.asJsonObject
+                            val callId = call.get("id")?.asString.orEmpty()
+                            val function = call.getAsJsonObject("function")
+                            val name = function?.get("name")?.asString.orEmpty()
+                            Log.d(TAG, "tool round=${round + 1}/${budget.displayMaxRounds} name=$name")
+                            reportProgress(onProgress, onEvent, "第 ${round + 1} 轮：${toolProgressText(name)}")
+                            val toolResult = executeToolCall(
+                                sourceTools,
+                                name,
+                                function?.get("arguments")?.asString ?: "{}",
+                                session,
+                            )
+                            budget.recordToolResult(name, toolResult)
+                            reportToolResult(onEvent, name, toolResult.content)
+                            session = AiWorkspaceStore.session(sessionId) ?: session
+                            apiMessages.add(JsonObject().apply {
+                                addProperty("role", "tool")
+                                addProperty("tool_call_id", callId)
+                                addProperty("content", toolResult.modelContent.take(MAX_TOOL_OUTPUT_CHARS))
+                            })
+                        }
+                        val pending = consumePendingPrompts()
+                        if (pending.isNotEmpty()) {
+                            session = AiWorkspaceStore.appendSessionMessages(
+                                sessionId,
+                                pending.map { AiMessage(role = "user", content = it) },
+                            ) ?: session
+                            pending.forEach { apiMessages.add(message("user", it)) }
+                            budget.recordPendingPrompts(pending.size)
+                            reportProgress(onProgress, onEvent, "已接收 ${pending.size} 条追加消息，转入下一轮...")
+                        }
+                    }
+                    error(budget.exhaustedMessage())
                 }
-                val pending = consumePendingPrompts()
-                if (pending.isNotEmpty()) {
-                    val current = AiWorkspaceStore.session(sessionId) ?: session
-                    AiWorkspaceStore.saveSession(
-                        current.copy(messages = current.messages + pending.map { AiMessage(role = "user", content = it) })
-                    )
-                    session = AiWorkspaceStore.session(sessionId) ?: current
-                    pending.forEach { apiMessages.add(message("user", it)) }
-                    reportProgress(onProgress, onEvent, "已接收 ${pending.size} 条追加消息，转入下一轮...")
-                }
+                result.exceptionOrNull()?.let { if (it is CancellationException) throw it }
+                result
             }
-            error("模型连续调用工具次数过多，请缩小任务后重试")
+        } finally {
+            sourceTools.close()
         }
-        result.exceptionOrNull()?.let { if (it is CancellationException) throw it }
-            result
-        }
-    } finally {
-        sourceTools.close()
     }
 
     private suspend fun replyCodex(
@@ -163,6 +265,7 @@ class AiAgent(
         proxyConfig: AiProxyConfig?,
         instructions: String,
         initialSession: AiSession,
+        sourceTools: AiSourceToolExecutor,
         onProgress: (String) -> Unit,
         onEvent: (AiAgentEvent) -> Unit,
         consumePendingPrompts: suspend () -> List<String>,
@@ -174,7 +277,9 @@ class AiAgent(
                 add(responseMessage(message.role, message.content))
             }
         }
-        repeat(MAX_TOOL_ROUNDS) { round ->
+        val budget = AiToolRoundBudget()
+        while (true) {
+            val round = budget.nextRoundOrNull() ?: break
             reportProgress(onProgress, onEvent, "第 ${round + 1} 轮：等待 Codex 响应...")
             val result = requestCodex(model, proxyConfig, instructions, input, tools, onEvent)
             result.items.forEach(input::add)
@@ -188,25 +293,37 @@ class AiAgent(
                     pending.forEach { input.add(responseMessage("user", it)) }
                     saveIntermediateReply(session.id, result.text, pending)
                     session = AiWorkspaceStore.session(session.id) ?: session
+                    budget.recordPendingPrompts(pending.size)
                     reportProgress(onProgress, onEvent, "已接收 ${pending.size} 条追加消息，继续处理...")
-                    return@repeat
+                    continue
                 }
-                session = AiWorkspaceStore.session(session.id) ?: session
-                session = session.copy(messages = session.messages + AiMessage(role = "assistant", content = finalText))
-                AiWorkspaceStore.saveSession(session)
+                val installBlocker = sourceTools.pendingInstallBlocker
+                if (installBlocker != null) {
+                    input.add(responseMessage("user", installGuardInstruction(installBlocker)))
+                    budget.recordToolResult("install_guard", AiAgentToolResult(installBlocker, true))
+                    reportInstallGuard(installBlocker, onProgress, onEvent)
+                    continue
+                }
+                installPendingSource(sourceTools, onProgress, onEvent)
+                session = AiWorkspaceStore.appendSessionMessages(
+                    session.id,
+                    listOf(AiMessage(role = "assistant", content = finalText)),
+                ) ?: session
                 return finalText
             }
             calls.forEach { element ->
                 val call = element.asJsonObject
                 val name = call.string("name")
                 val callId = call.string("call_id")
-                Log.d(TAG, "Codex tool round=${round + 1}/$MAX_TOOL_ROUNDS name=$name")
+                Log.d(TAG, "Codex tool round=${round + 1}/${budget.displayMaxRounds} name=$name")
                 reportProgress(onProgress, onEvent, "第 ${round + 1} 轮：${toolProgressText(name)}")
                 val toolResult = executeToolCall(
+                    sourceTools,
                     name,
                     call.string("arguments").ifBlank { "{}" },
                     session,
                 )
+                budget.recordToolResult(name, toolResult)
                 reportToolResult(onEvent, name, toolResult.content)
                 session = AiWorkspaceStore.session(session.id) ?: session
                 input.add(JsonObject().apply {
@@ -217,16 +334,16 @@ class AiAgent(
             }
             val pending = consumePendingPrompts()
             if (pending.isNotEmpty()) {
-                val current = AiWorkspaceStore.session(session.id) ?: session
-                AiWorkspaceStore.saveSession(
-                    current.copy(messages = current.messages + pending.map { AiMessage(role = "user", content = it) })
-                )
-                session = AiWorkspaceStore.session(session.id) ?: current
+                session = AiWorkspaceStore.appendSessionMessages(
+                    session.id,
+                    pending.map { AiMessage(role = "user", content = it) },
+                ) ?: session
                 pending.forEach { input.add(responseMessage("user", it)) }
+                budget.recordPendingPrompts(pending.size)
                 reportProgress(onProgress, onEvent, "已接收 ${pending.size} 条追加消息，转入下一轮...")
             }
         }
-        error("模型连续调用工具次数过多，请缩小任务后重试")
+        error(budget.exhaustedMessage())
     }
 
     private suspend fun replyAnthropic(
@@ -234,6 +351,7 @@ class AiAgent(
         proxyConfig: AiProxyConfig?,
         systemPrompt: String,
         initialSession: AiSession,
+        sourceTools: AiSourceToolExecutor,
         onProgress: (String) -> Unit,
         onEvent: (AiAgentEvent) -> Unit,
         consumePendingPrompts: suspend () -> List<String>,
@@ -245,7 +363,9 @@ class AiAgent(
                 add(anthropicTextMessage(saved.role, saved.content))
             }
         }
-        repeat(MAX_TOOL_ROUNDS) { round ->
+        val budget = AiToolRoundBudget()
+        while (true) {
+            val round = budget.nextRoundOrNull() ?: break
             reportProgress(onProgress, onEvent, "第 ${round + 1} 轮：等待 Claude 响应...")
             val result = requestAnthropic(model, proxyConfig, systemPrompt, messages, tools, onEvent)
             messages.add(JsonObject().apply {
@@ -270,21 +390,31 @@ class AiAgent(
                     })
                     saveIntermediateReply(session.id, result.text, pending)
                     session = AiWorkspaceStore.session(session.id) ?: session
+                    budget.recordPendingPrompts(pending.size)
                     reportProgress(onProgress, onEvent, "已接收 ${pending.size} 条追加消息，继续处理...")
-                    return@repeat
+                    continue
                 }
-                session = AiWorkspaceStore.session(session.id) ?: session
-                AiWorkspaceStore.saveSession(
-                    session.copy(messages = session.messages + AiMessage(role = "assistant", content = finalText))
-                )
+                val installBlocker = sourceTools.pendingInstallBlocker
+                if (installBlocker != null) {
+                    messages.add(anthropicTextMessage("user", installGuardInstruction(installBlocker)))
+                    budget.recordToolResult("install_guard", AiAgentToolResult(installBlocker, true))
+                    reportInstallGuard(installBlocker, onProgress, onEvent)
+                    continue
+                }
+                installPendingSource(sourceTools, onProgress, onEvent)
+                session = AiWorkspaceStore.appendSessionMessages(
+                    session.id,
+                    listOf(AiMessage(role = "assistant", content = finalText)),
+                ) ?: session
                 return finalText
             }
 
             val userContent = JsonArray()
             result.toolCalls.forEach { call ->
-                Log.d(TAG, "Claude tool round=${round + 1}/$MAX_TOOL_ROUNDS name=${call.name}")
+                Log.d(TAG, "Claude tool round=${round + 1}/${budget.displayMaxRounds} name=${call.name}")
                 reportProgress(onProgress, onEvent, "第 ${round + 1} 轮：${toolProgressText(call.name)}")
-                val toolResult = executeToolCall(call.name, call.input, session)
+                val toolResult = executeToolCall(sourceTools, call.name, call.input, session)
+                budget.recordToolResult(call.name, toolResult)
                 reportToolResult(onEvent, call.name, toolResult.content)
                 session = AiWorkspaceStore.session(session.id) ?: session
                 userContent.add(JsonObject().apply {
@@ -296,17 +426,17 @@ class AiAgent(
             }
             val pending = consumePendingPrompts()
             if (pending.isNotEmpty()) {
-                val current = AiWorkspaceStore.session(session.id) ?: session
-                AiWorkspaceStore.saveSession(
-                    current.copy(messages = current.messages + pending.map { AiMessage(role = "user", content = it) })
-                )
-                session = AiWorkspaceStore.session(session.id) ?: current
+                session = AiWorkspaceStore.appendSessionMessages(
+                    session.id,
+                    pending.map { AiMessage(role = "user", content = it) },
+                ) ?: session
                 pending.forEach { text ->
                     userContent.add(JsonObject().apply {
                         addProperty("type", "text")
                         addProperty("text", text)
                     })
                 }
+                budget.recordPendingPrompts(pending.size)
                 reportProgress(onProgress, onEvent, "已接收 ${pending.size} 条追加消息，转入下一轮...")
             }
             messages.add(JsonObject().apply {
@@ -314,7 +444,7 @@ class AiAgent(
                 add("content", userContent)
             })
         }
-        error("模型连续调用工具次数过多，请缩小任务后重试")
+        error(budget.exhaustedMessage())
     }
 
     private suspend fun reportProgress(
@@ -334,6 +464,10 @@ class AiAgent(
         result: String,
     ) {
         val summary = when (name) {
+            "source_status" -> result
+                .lineSequence()
+                .take(12)
+                .joinToString("\n")
             "source_get" -> "已读取当前源码片段（${result.length} 字符）"
             "source_replace" -> result.lineSequence().firstOrNull().orEmpty()
             else -> result.take(MAX_VISIBLE_EVENT_CHARS)
@@ -343,27 +477,53 @@ class AiAgent(
         }
     }
 
+    private suspend fun installPendingSource(
+        sourceTools: AiSourceToolExecutor,
+        onProgress: (String) -> Unit,
+        onEvent: (AiAgentEvent) -> Unit,
+    ) {
+        if (!sourceTools.hasPendingInstall) return
+        reportProgress(onProgress, onEvent, "源码修改已完成，正在自动安装...")
+        sourceTools.installPendingSource()?.let { result ->
+            reportToolResult(onEvent, "source_install", result)
+        }
+    }
+
+    private suspend fun reportInstallGuard(
+        blocker: String,
+        onProgress: (String) -> Unit,
+        onEvent: (AiAgentEvent) -> Unit,
+    ) {
+        reportProgress(onProgress, onEvent, "源码尚未满足自动安装条件，要求模型继续验证...")
+        reportToolResult(onEvent, "install_guard", blocker)
+    }
+
+    private fun installGuardInstruction(blocker: String): String =
+        "[host_validation_required]\n$blocker\n这是宿主强制安装门禁。继续使用工具完成验证；门禁清除前不要输出最终结论。"
+
     private fun toolProgressText(name: String): String = when (name) {
+        "source_status" -> "读取会话状态和建议流程..."
         "source_get" -> "读取当前源码..."
         "source_docs" -> "读取组件 API 契约..."
         "source_replace" -> "写入生成的源码..."
+        "source_install" -> "安装最终源码..."
+        "install_guard" -> "检查自动安装条件..."
         "source_validate" -> "校验源码..."
         "source_debug" -> "在 $AI_PRODUCT_NAME 内调试完整数据链路..."
-        "installed_sources" -> "读取已安装源列表..."
-        "installed_source_read" -> "读取已安装源源码..."
         "http_request" -> "请求并分析目标网站/API..."
         "media_probe" -> "探测最终播放地址和 HLS 分片..."
         else -> "执行工具 $name..."
     }
 
     private fun toolDisplayName(name: String): String = when (name) {
+        "source_status" -> "会话状态"
         "source_get" -> "读取源码"
         "source_docs" -> "组件 API 契约"
         "source_replace" -> "写入源码"
+        "source_install" -> "自动安装"
+        "install_guard" -> "自动安装门禁"
         "source_validate" -> "校验源码"
         "source_debug" -> "数据链路调试"
-        "installed_sources" -> "已安装源列表"
-        "installed_source_read" -> "读取已安装源"
         "http_request" -> "网络请求"
         "media_probe" -> "媒体探测"
         else -> name
@@ -375,7 +535,7 @@ class AiAgent(
             assistantText.takeIf { it.isNotBlank() }?.let { add(AiMessage(role = "assistant", content = it)) }
             pending.forEach { add(AiMessage(role = "user", content = it)) }
         }
-        AiWorkspaceStore.saveSession(current.copy(messages = current.messages + additions))
+        AiWorkspaceStore.appendSessionMessages(current.id, additions)
     }
 
     private suspend fun request(
@@ -415,18 +575,24 @@ class AiAgent(
             val reasoning = StringBuilder()
             val calls = linkedMapOf<Int, JsonObject>()
             val reasoningThrottle = ReasoningThrottle()
+            val stream = AiStreamGuard("AI API")
             val source = response.body?.source() ?: error("AI API 响应为空")
             while (!source.exhausted()) {
                 val line = source.readUtf8Line() ?: break
                 if (!line.startsWith("data:")) continue
                 val data = line.removePrefix("data:").trim()
-                if (data.isBlank() || data == "[DONE]") continue
-                val event = runCatching { JsonParser.parseString(data).asJsonObject }.getOrNull() ?: continue
+                if (data.isBlank()) continue
+                if (data == "[DONE]") {
+                    stream.markComplete()
+                    continue
+                }
+                val event = parseAiSseEvent("AI API", data)
                 event.getAsJsonObject("error")?.let { apiError ->
                     error(apiError.string("message").ifBlank { "AI 流式响应失败" })
                 }
-                val delta = event.getAsJsonArray("choices")?.firstOrNull()?.asJsonObject
-                    ?.getAsJsonObject("delta") ?: continue
+                val choice = event.getAsJsonArray("choices")?.firstOrNull()?.asJsonObject ?: continue
+                if (choice.get("finish_reason")?.takeUnless { it.isJsonNull } != null) stream.markComplete()
+                val delta = choice.getAsJsonObject("delta") ?: continue
                 content.append(delta.string("content"))
                 val reasoningDelta = delta.string("reasoning_content")
                 if (reasoningDelta.isNotEmpty()) {
@@ -455,6 +621,7 @@ class AiAgent(
                     function.addProperty("arguments", function.string("arguments") + functionPart?.string("arguments").orEmpty())
                 }
             }
+            stream.requireComplete()
             if (reasoning.isNotBlank()) reportReasoning(onEvent, reasoning.toString())
             val assistant = JsonObject().apply {
                 addProperty("role", "assistant")
@@ -512,13 +679,14 @@ class AiAgent(
             val signatureDeltas = mutableMapOf<Int, StringBuilder>()
             var stopReason = ""
             var lastReasoningUpdate = 0L
+            val stream = AiStreamGuard("Claude API")
             val source = response.body?.source() ?: error("Claude API 响应为空")
             while (!source.exhausted()) {
                 val line = source.readUtf8Line() ?: break
                 if (!line.startsWith("data:")) continue
                 val data = line.removePrefix("data:").trim()
-                if (data.isBlank() || data == "[DONE]") continue
-                val event = runCatching { JsonParser.parseString(data).asJsonObject }.getOrNull() ?: continue
+                if (data.isBlank()) continue
+                val event = parseAiSseEvent("Claude API", data)
                 when (event.string("type")) {
                     "content_block_start" -> {
                         val index = event.intOrNull("index") ?: continue
@@ -556,8 +724,10 @@ class AiAgent(
                         val error = event.getAsJsonObject("error")
                         error(error?.string("message").orEmpty().ifBlank { "Claude 流式响应失败" })
                     }
+                    "message_stop" -> stream.markComplete()
                 }
             }
+            stream.requireComplete()
 
             val content = JsonArray()
             blocks.keys.sorted().forEach { index ->
@@ -567,7 +737,7 @@ class AiAgent(
                     "tool_use" -> {
                         val input = inputDeltas[index]?.toString().orEmpty()
                         if (input.isNotBlank()) {
-                            block.add("input", runCatching { JsonParser.parseString(input).asJsonObject }.getOrElse { JsonObject() })
+                            block.add("input", parseToolArguments("Claude", input))
                         }
                     }
                     "thinking" -> {
@@ -637,13 +807,14 @@ class AiAgent(
                 val deltaText = StringBuilder()
                 val reasoningSummary = StringBuilder()
                 var lastReasoningUpdate = 0L
+                val stream = AiStreamGuard("Codex API")
                 val source = response.body?.source() ?: error("Codex API 响应为空")
                 while (!source.exhausted()) {
                     val line = source.readUtf8Line() ?: break
                     if (!line.startsWith("data:")) continue
                     val data = line.removePrefix("data:").trim()
                     if (data.isBlank() || data == "[DONE]") continue
-                    val event = runCatching { JsonParser.parseString(data).asJsonObject }.getOrNull() ?: continue
+                    val event = parseAiSseEvent("Codex API", data)
                     when (event.string("type")) {
                         "response.output_item.done" -> event.get("item")?.let(items::add)
                         "response.output_text.delta" -> deltaText.append(event.string("delta"))
@@ -662,11 +833,23 @@ class AiAgent(
                         }
                         "response.failed", "error" -> {
                             val message = event.getAsJsonObject("error")?.string("message")
+                                ?: event.getAsJsonObject("response")
+                                    ?.getAsJsonObject("error")
+                                    ?.string("message")
                                 ?: event.string("message").ifBlank { "Codex 响应失败" }
                             error(message)
                         }
+                        "response.incomplete" -> error(
+                            event.getAsJsonObject("response")
+                                ?.getAsJsonObject("incomplete_details")
+                                ?.string("reason")
+                                ?.let { "Codex 响应未完成: $it" }
+                                ?: "Codex 响应未完成",
+                        )
+                        "response.completed" -> stream.markComplete()
                     }
                 }
+                stream.requireComplete()
                 if (reasoningSummary.isNotBlank()) {
                     reportReasoning(onEvent, reasoningSummary.toString())
                 }
@@ -726,26 +909,36 @@ class AiAgent(
         })
     }
 
-    private suspend fun executeToolCall(name: String, rawArguments: String, session: AiSession): AiToolCallResult = try {
+    private suspend fun executeToolCall(
+        sourceTools: AiSourceToolExecutor,
+        name: String,
+        rawArguments: String,
+        session: AiSession,
+    ): AiAgentToolResult = try {
         val arguments = JsonParser.parseString(rawArguments).asJsonObject
         toolCallResult(sourceTools.execute(name, arguments, session))
     } catch (cancelled: CancellationException) {
         throw cancelled
     } catch (error: Throwable) {
-        AiToolCallResult("工具执行失败: ${error.message ?: error.javaClass.simpleName}", true)
+        AiAgentToolResult("工具执行失败: ${error.message ?: error.javaClass.simpleName}", true)
     }
 
-    private suspend fun executeToolCall(name: String, arguments: JsonObject, session: AiSession): AiToolCallResult = try {
+    private suspend fun executeToolCall(
+        sourceTools: AiSourceToolExecutor,
+        name: String,
+        arguments: JsonObject,
+        session: AiSession,
+    ): AiAgentToolResult = try {
         toolCallResult(sourceTools.execute(name, arguments, session))
     } catch (cancelled: CancellationException) {
         throw cancelled
     } catch (error: Throwable) {
-        AiToolCallResult("工具执行失败: ${error.message ?: error.javaClass.simpleName}", true)
+        AiAgentToolResult("工具执行失败: ${error.message ?: error.javaClass.simpleName}", true)
     }
 
-    private fun toolCallResult(content: String): AiToolCallResult {
+    private fun toolCallResult(content: String): AiAgentToolResult {
         val isError = content.startsWith(AiSourceToolExecutor.TOOL_ERROR_PREFIX)
-        return AiToolCallResult(
+        return AiAgentToolResult(
             content = content.removePrefix(AiSourceToolExecutor.TOOL_ERROR_PREFIX).trimStart(),
             isError = isError,
         )
@@ -824,7 +1017,6 @@ class AiAgent(
 
     companion object {
         private const val TAG = "AiAgent"
-        private const val MAX_TOOL_ROUNDS = 32
         private const val MAX_TOOL_OUTPUT_CHARS = 120_000
         private const val MAX_VISIBLE_EVENT_CHARS = 1_200
         private const val MAX_VISIBLE_REASONING_CHARS = 4_000
@@ -835,14 +1027,6 @@ class AiAgent(
     }
 
     private data class CodexResponse(val items: List<JsonElement>, val text: String)
-
-    private data class AiToolCallResult(
-        val content: String,
-        val isError: Boolean,
-    ) {
-        val modelContent: String
-            get() = if (isError) "[tool_error]\n$content" else content
-    }
 
     private data class AnthropicResponse(
         val content: JsonArray,
@@ -856,4 +1040,10 @@ class AiAgent(
         val name: String,
         val input: JsonObject,
     )
+}
+
+internal fun parseToolArguments(provider: String, input: String): JsonObject = try {
+    JsonParser.parseString(input).asJsonObject
+} catch (error: Throwable) {
+    throw IllegalStateException("$provider 工具参数不是完整 JSON", error)
 }

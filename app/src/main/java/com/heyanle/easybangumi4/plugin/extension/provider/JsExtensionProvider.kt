@@ -70,45 +70,77 @@ class JsExtensionProvider(
 
     override fun innerAppendExtension(displayName: String, inputStream: InputStream) {
         fileObserver.stopWatching()
-        val fileName = getNameWhenLoad(displayName, System.currentTimeMillis(), atomicLong.getAndIncrement())
-        // "${System.currentTimeMillis()}-${atomicLong.getAndIncrement()}${getSuffix()}"
-        File(cacheFolder).mkdirs()
-        File(folderPath).mkdirs()
+        try {
+            val now = System.currentTimeMillis()
+            val fileName = getNameWhenLoad(displayName, now, atomicLong.getAndIncrement())
+            File(cacheFolder).mkdirs()
+            File(folderPath).mkdirs()
 
-        val cacheFile = File(cacheFolder, fileName)
-
-        val targetFileTemp = File(folderPath, "${fileName}.temp")
-        cacheFile.createNewFile()
-        inputStream.use { input ->
-            cacheFile.outputStream().use { out ->
-                input.copyTo(out)
+            val cacheFile = File(cacheFolder, fileName)
+            cacheFile.createNewFile()
+            inputStream.use { input ->
+                cacheFile.outputStream().use { out ->
+                    input.copyTo(out)
+                }
             }
-        }
-        cacheFile.deleteOnExit()
-        val loader = loadExtensionLoader(listOf(cacheFile)).firstOrNull()
-            ?: throw IOException("无法创建插件加载器")
-        if (!loader.canLoad()) throw IOException("插件文件格式不受支持")
+            cacheFile.deleteOnExit()
+            val loader = loadExtensionLoader(listOf(cacheFile)).firstOrNull()
+                ?: throw IOException("无法创建插件加载器")
+            if (!loader.canLoad()) throw IOException("插件文件格式不受支持")
 
-        val loaded = loader.load()
-        val ext = loaded as? ExtensionInfo.Installed
-            ?: throw IOException((loaded as? ExtensionInfo.InstallError)?.errMsg ?: "插件加载失败")
-        val source = ext.sources.firstOrNull() ?: throw IOException("插件中没有可安装的番源")
-        val suffix = when {
-            displayName.endsWith(EXTENSION_CRY_SUFFIX) -> EXTENSION_CRY_SUFFIX
-            else -> EXTENSION_SUFFIX
+            val loaded = loader.load()
+            val ext = loaded as? ExtensionInfo.Installed
+                ?: throw IOException((loaded as? ExtensionInfo.InstallError)?.errMsg ?: "插件加载失败")
+            val source = ext.sources.firstOrNull() ?: throw IOException("插件中没有可安装的番源")
+            val suffix = when {
+                displayName.endsWith(EXTENSION_CRY_SUFFIX) -> EXTENSION_CRY_SUFFIX
+                else -> EXTENSION_SUFFIX
+            }
+            val targetFile = File(folderPath, source.key + "." + suffix)
+            val targetFileTemp = File(folderPath, "${targetFile.name}.${now}.installing")
+            val targetFileBackup = File(folderPath, "${targetFile.name}.${now}.backup")
+            val otherSuffixFile = File(
+                folderPath,
+                source.key + "." + if (suffix == EXTENSION_SUFFIX) EXTENSION_CRY_SUFFIX else EXTENSION_SUFFIX,
+            )
+
+            cacheFile.copyTo(targetFileTemp, overwrite = true)
+            if (!targetFileTemp.isFile || targetFileTemp.length() <= 0L) {
+                throw IOException("插件临时文件写入失败")
+            }
+
+            var backedUp = false
+            try {
+                if (targetFile.isFile) {
+                    targetFileBackup.delete()
+                    if (!targetFile.renameTo(targetFileBackup)) {
+                        targetFile.copyTo(targetFileBackup, overwrite = true)
+                        if (!targetFile.delete()) throw IOException("旧插件文件备份后删除失败")
+                    }
+                    backedUp = true
+                }
+                if (!targetFileTemp.renameTo(targetFile)) {
+                    targetFileTemp.copyTo(targetFile, overwrite = true)
+                    targetFileTemp.delete()
+                }
+                if (!targetFile.isFile || targetFile.length() <= 0L) throw IOException("插件文件写入失败")
+                targetFileBackup.delete()
+                otherSuffixFile.takeIf { it.isFile }?.delete()
+            } catch (error: Throwable) {
+                targetFileTemp.delete()
+                if (backedUp && targetFileBackup.isFile) {
+                    targetFile.delete()
+                    targetFileBackup.renameTo(targetFile)
+                }
+                throw error
+            }
+
+            cacheFolderFile.deleteRecursively()
+            cacheFolderFile.mkdirs()
+            scanFolder()
+        } finally {
+            fileObserver.startWatching()
         }
-        val targetFile = File(folderPath, source.key + "." + suffix)
-        File(folderPath, source.key + "." + EXTENSION_SUFFIX).delete()
-        File(folderPath, source.key + "." + EXTENSION_CRY_SUFFIX).delete()
-        cacheFile.copyTo(targetFileTemp, overwrite = true)
-        if (!targetFileTemp.renameTo(targetFile)) {
-            targetFileTemp.copyTo(targetFile, overwrite = true)
-            targetFileTemp.delete()
-        }
-        if (!targetFile.isFile) throw IOException("插件文件写入失败")
-        cacheFolderFile.deleteRecursively()
-        cacheFolderFile.mkdirs()
-        scanFolder()
     }
 
 }

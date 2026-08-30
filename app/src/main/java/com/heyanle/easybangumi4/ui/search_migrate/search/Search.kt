@@ -64,6 +64,7 @@ import com.heyanle.easybangumi4.ui.ai.AiModelSelectionDialog
 import com.heyanle.easybangumi4.ui.ai.AiWorkspaceStore
 import com.heyanle.easybangumi4.ui.ai.AI_PRODUCT_NAME
 import com.heyanle.easybangumi4.ui.ai.AiSkillCapability
+import com.heyanle.easybangumi4.ui.ai.availableAiModels
 import com.heyanle.easybangumi4.ui.common.EmptyPage
 import com.heyanle.easybangumi4.ui.search_migrate.search.gather.GatherSearch
 import com.heyanle.easybangumi4.ui.search_migrate.search.normal.NormalSearch
@@ -171,7 +172,7 @@ fun Search(
                     repairToConfirm = null
                     val existing = AiWorkspaceStore.sourceSession(issue.sourceKey, extension)
                     val canReuseSession = existing != null &&
-                        aiWorkspace.models.any { it.id == existing.modelId }
+                        aiWorkspace.availableAiModels().any { it.id == existing.modelId }
                     if (canReuseSession) {
                         val session = AiWorkspaceStore.enqueueSourceTask(
                             issue.sourceKey,
@@ -197,7 +198,7 @@ fun Search(
 
     repairAwaitingModel?.let { request ->
         AiModelSelectionDialog(
-            models = aiWorkspace.models.filter { it.enabled },
+            models = aiWorkspace.availableAiModels(),
             onDismiss = { repairAwaitingModel = null },
             onSelected = { model ->
                 val session = AiWorkspaceStore.enqueueSourceTask(

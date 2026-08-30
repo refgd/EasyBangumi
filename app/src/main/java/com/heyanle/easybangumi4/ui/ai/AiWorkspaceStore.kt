@@ -1,6 +1,7 @@
 package com.heyanle.easybangumi4.ui.ai
 
 import android.util.AtomicFile
+import android.util.Log
 import com.google.gson.GsonBuilder
 import com.heyanle.easybangumi4.APP
 import com.heyanle.easybangumi4.plugin.extension.ExtensionInfo
@@ -9,6 +10,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -20,11 +23,23 @@ object AiWorkspaceStore {
     private val gson = GsonBuilder().setPrettyPrinting().create()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val writeMutex = Mutex()
+    private val writeRequests = Channel<Unit>(Channel.CONFLATED)
     private val workspaceFile: File by lazy { File(APP.filesDir, "ai/workspace.json") }
     private val atomicWorkspaceFile: AtomicFile by lazy { AtomicFile(workspaceFile) }
 
     private val _state = MutableStateFlow(load())
     val state = _state.asStateFlow()
+
+    init {
+        scope.launch {
+            for (ignored in writeRequests) {
+                writeMutex.withLock {
+                    runCatching { writeSnapshot(_state.value) }
+                        .onFailure { Log.e("AiWorkspaceStore", "Failed to persist AI workspace", it) }
+                }
+            }
+        }
+    }
 
     private fun load(): AiWorkspaceData {
         val parsed = runCatching {
@@ -56,13 +71,8 @@ object AiWorkspaceStore {
     }
 
     private fun update(block: (AiWorkspaceData) -> AiWorkspaceData) {
-        val next = block(_state.value).normalizeBuiltInSkills()
-        _state.value = next
-        scope.launch {
-            writeMutex.withLock {
-                writeSnapshot(_state.value)
-            }
-        }
+        _state.update { current -> block(current).normalizeBuiltInSkills() }
+        writeRequests.trySend(Unit)
     }
 
     private fun writeSnapshot(data: AiWorkspaceData) {
@@ -86,7 +96,13 @@ object AiWorkspaceStore {
     fun sourceSession(
         sourceKey: String,
         extension: ExtensionInfo.Installed?,
-    ): AiSession? = state.value.sessions
+    ): AiSession? = findSourceSession(state.value, sourceKey, extension)
+
+    private fun findSourceSession(
+        workspace: AiWorkspaceData,
+        sourceKey: String,
+        extension: ExtensionInfo.Installed?,
+    ): AiSession? = workspace.sessions
         .filter {
             (sourceKey.isNotBlank() && it.sourceKey == sourceKey) ||
                 (extension != null && it.sourcePath == extension.sourcePath)
@@ -100,47 +116,79 @@ object AiWorkspaceStore {
         modelId: String = "",
         skillCapabilities: List<AiSkillCapability> = listOf(AiSkillCapability.BASE),
     ): AiSession {
-        val workspace = state.value
-        val existing = sourceSession(sourceKey, extension)
         val taskMessage = AiMessage(role = "user", content = task)
-        val session = if (existing != null) {
-            existing.copy(
-                sourceKey = sourceKey,
-                sourcePath = existing.sourcePath.ifBlank { extension?.sourcePath.orEmpty() },
-                modelId = selectSessionModelId(modelId, existing.modelId, workspace.models),
-                skillCapabilities = skillCapabilities,
-                messages = existing.messages + taskMessage,
-                activeTaskMessageId = taskMessage.id,
-                pendingAutoStart = true,
-            )
-        } else {
-            val sourceCode = extension?.takeIf {
-                it.loadType == ExtensionInfo.TYPE_JS_FILE && it.sourcePath.endsWith(".js", true)
-            }?.let {
-                runCatching { File(it.sourcePath).readText(Charsets.UTF_8) }.getOrDefault("")
-            }.orEmpty()
-            AiSession(
-                title = extension?.label ?: sourceKey,
-                sourceKey = sourceKey,
-                sourceVersionName = extension?.versionName.orEmpty(),
-                sourcePath = extension?.sourcePath.orEmpty(),
-                sourceCode = sourceCode,
-                modelId = modelId,
-                skillCapabilities = skillCapabilities,
-                messages = listOf(taskMessage),
-                activeTaskMessageId = taskMessage.id,
-                pendingAutoStart = true,
+        var result: AiSession? = null
+        update { workspace ->
+            val existing = findSourceSession(workspace, sourceKey, extension)
+            val installedSourceCode = readInstalledSourceCode(extension)
+            val session = if (existing != null) {
+                existing.copy(
+                    title = extension?.label?.ifBlank { existing.title } ?: existing.title,
+                    sourceKey = sourceKey,
+                    sourceVersionName = extension?.versionName?.ifBlank { existing.sourceVersionName }
+                        ?: existing.sourceVersionName,
+                    sourcePath = extension?.sourcePath?.ifBlank { existing.sourcePath } ?: existing.sourcePath,
+                    sourceCode = installedSourceCode.ifBlank { existing.sourceCode },
+                    modelId = selectSessionModelId(modelId, existing.modelId, workspace.models),
+                    skillCapabilities = skillCapabilities,
+                    messages = existing.messages + taskMessage,
+                    activeTaskMessageId = taskMessage.id,
+                    pendingAutoStart = true,
+                    updatedAt = System.currentTimeMillis(),
+                )
+            } else {
+                AiSession(
+                    title = extension?.label ?: sourceKey,
+                    sourceKey = sourceKey,
+                    sourceVersionName = extension?.versionName.orEmpty(),
+                    sourcePath = extension?.sourcePath.orEmpty(),
+                    sourceCode = installedSourceCode,
+                    modelId = selectSessionModelId(modelId, "", workspace.models),
+                    skillCapabilities = skillCapabilities,
+                    messages = listOf(taskMessage),
+                    activeTaskMessageId = taskMessage.id,
+                    pendingAutoStart = true,
+                )
+            }
+            result = session
+            workspace.copy(
+                sessions = (workspace.sessions.filterNot { it.id == session.id } + session)
+                    .sortedByDescending { it.updatedAt },
             )
         }
-        saveSession(session)
-        return session
+        return checkNotNull(result)
     }
+
+    private fun readInstalledSourceCode(extension: ExtensionInfo.Installed?): String = extension?.takeIf {
+        it.loadType == ExtensionInfo.TYPE_JS_FILE && it.sourcePath.endsWith(".js", true)
+    }?.let {
+        runCatching { File(it.sourcePath).readText(Charsets.UTF_8) }.getOrDefault("")
+    }.orEmpty()
 
     fun saveSession(session: AiSession) = update { data ->
         data.copy(
             sessions = (data.sessions.filterNot { it.id == session.id } +
                 session.copy(updatedAt = System.currentTimeMillis())).sortedByDescending { it.updatedAt }
         )
+    }
+
+    fun updateSession(id: String, block: (AiSession) -> AiSession): AiSession? {
+        var result: AiSession? = null
+        update { data ->
+            val current = data.sessions.firstOrNull { it.id == id } ?: return@update data
+            val next = block(current).copy(id = current.id, updatedAt = System.currentTimeMillis())
+            result = next
+            data.copy(
+                sessions = (data.sessions.filterNot { it.id == id } + next)
+                    .sortedByDescending { it.updatedAt },
+            )
+        }
+        return result
+    }
+
+    fun appendSessionMessages(id: String, messages: List<AiMessage>): AiSession? {
+        if (messages.isEmpty()) return session(id)
+        return updateSession(id) { current -> current.copy(messages = current.messages + messages) }
     }
 
     fun deleteSession(id: String) = update { data ->
@@ -167,13 +215,7 @@ object AiWorkspaceStore {
         require(skill.name.isNotBlank()) { "指南名称不能为空" }
         require(skill.prompt.isNotBlank()) { "指南内容不能为空" }
         update { data ->
-            val existing = data.skills.firstOrNull { it.id == skill.id }
-            val saved = if (existing?.builtIn == true) {
-                existing.copy(enabled = skill.enabled)
-            } else {
-                skill.copy(builtIn = false)
-            }
-            data.copy(skills = data.skills.filterNot { it.id == saved.id } + saved)
+            data.withSavedSkill(skill)
         }
     }
 
@@ -185,4 +227,21 @@ object AiWorkspaceStore {
         data.copy(codexAuth = auth)
     }
 
+}
+
+internal fun AiWorkspaceData.withSavedSkill(skill: AiSkill): AiWorkspaceData {
+    val existing = skills.firstOrNull { it.id == skill.id }
+    val saved = if (existing?.builtIn == true) {
+        existing.copy(enabled = skill.enabled)
+    } else {
+        skill.copy(builtIn = false)
+    }
+    val nextSkills = skills.mapNotNull { current ->
+        when {
+            current.id == saved.id -> null
+            saved.enabled && current.capability == saved.capability -> current.copy(enabled = false)
+            else -> current
+        }
+    } + saved
+    return copy(skills = nextSkills)
 }

@@ -29,6 +29,7 @@ import java.util.Locale
 
 object Debug {
     var callback: Callback? = null
+        private set
     private var debugSource: String? = null
     private var debugBundle: JSComponentBundle? = null
     private val tasks = CompositeCoroutine()
@@ -108,6 +109,19 @@ object Debug {
             debugSource = null
             callback = null
         }
+    }
+
+    @Synchronized
+    fun beginSession(owner: Callback): Boolean {
+        if (callback != null && callback !== owner) return false
+        cancelDebug(true)
+        callback = owner
+        return true
+    }
+
+    @Synchronized
+    fun endSession(owner: Callback) {
+        if (callback === owner) cancelDebug(true)
     }
 
     fun startDebug(scope: CoroutineScope, ext: ExtensionInfo.Installed) {

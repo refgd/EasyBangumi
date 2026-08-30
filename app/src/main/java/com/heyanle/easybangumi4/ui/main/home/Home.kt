@@ -68,6 +68,7 @@ import com.heyanle.easybangumi4.ui.common.page.SourcePageErrorActions
 import com.heyanle.easybangumi4.ui.ai.AiWorkspaceStore
 import com.heyanle.easybangumi4.ui.ai.AiModelSelectionDialog
 import com.heyanle.easybangumi4.ui.ai.AI_PRODUCT_NAME
+import com.heyanle.easybangumi4.ui.ai.availableAiModels
 import com.heyanle.easybangumi4.ui.ai.AiSkillCapability
 import com.heyanle.easybangumi4.ui.main.MainViewModel
 import com.heyanle.inject.core.Inject
@@ -235,7 +236,7 @@ fun Home() {
                     repairErrorToConfirm = null
                     val existing = AiWorkspaceStore.sourceSession(sourceKey, extension)
                     val canReuseSession = existing != null &&
-                        aiWorkspace.models.any { it.id == existing.modelId }
+                        aiWorkspace.availableAiModels().any { it.id == existing.modelId }
                     if (canReuseSession) {
                         val session = AiWorkspaceStore.enqueueSourceTask(
                             sourceKey,
@@ -261,7 +262,7 @@ fun Home() {
 
     repairAwaitingModel?.let { request ->
         AiModelSelectionDialog(
-            models = aiWorkspace.models.filter { it.enabled },
+            models = aiWorkspace.availableAiModels(),
             onDismiss = { repairAwaitingModel = null },
             onSelected = { model ->
                 val session = AiWorkspaceStore.enqueueSourceTask(
