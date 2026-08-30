@@ -21,6 +21,8 @@ import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.lang.ref.WeakReference
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -36,6 +38,8 @@ class WebViewHelperV2Impl: WebViewHelperV2 {
 
         // 创建三次还失败那就寄
         const val MAX_TRY_COUNT = 3
+        private const val RENDER_WAIT_GRACE_MS = 20_000L
+        private val renderMutex = Mutex()
 
         var webViewRef: WeakReference<WebView>? = null
         var check: WeakReference<(WebView) -> Boolean>? = null
@@ -112,10 +116,16 @@ class WebViewHelperV2Impl: WebViewHelperV2 {
         var res: RenderedResult? = null
         val countDownLatch = CountDownLatch(1)
         scope.launch {
-            res = renderedHtml(strategy)
-            countDownLatch.countDown()
+            try {
+                res = runCatching { renderedHtml(strategy) }.getOrNull()
+            } finally {
+                countDownLatch.countDown()
+            }
         }
-        countDownLatch.await(10, TimeUnit.SECONDS)
+        countDownLatch.await(
+            (strategy.timeOut + RENDER_WAIT_GRACE_MS).coerceAtLeast(30_000L),
+            TimeUnit.MILLISECONDS,
+        )
         return res ?: RenderedResult(
             strategy = strategy,
             url = "",
@@ -125,9 +135,12 @@ class WebViewHelperV2Impl: WebViewHelperV2 {
         )
     }
 
-    override suspend fun renderedHtml(strategy: WebViewHelperV2.RenderedStrategy): WebViewHelperV2.RenderedResult {
+    override suspend fun renderedHtml(
+        strategy: WebViewHelperV2.RenderedStrategy,
+    ): WebViewHelperV2.RenderedResult = renderMutex.withLock {
         val webview = getGlobalWebViewOrNull() ?: throw WebViewCreatedException()
-        return withContext(Dispatchers.Main){
+        return@withLock withContext(Dispatchers.Main){
+            webview.stopLoading()
             webview.clearWeb()
             webview.settings.apply {
                 setUserAgentString(strategy.userAgentString ?: userAgentString)
@@ -138,12 +151,12 @@ class WebViewHelperV2Impl: WebViewHelperV2 {
 
             if (!strategy.isBlockBlob) {
                 // 拦截普通资源模式
-                webview.loadUrl(strategy.url, strategy.header.orEmpty())
                 var r = webview.waitUntil(
                     if (strategy.callBackRegex.isEmpty()) null else Regex(strategy.callBackRegex),
                     strategy.timeOut,
                     true,
-                    ignoreTimeoutExt = true
+                    ignoreTimeoutExt = true,
+                    onReady = { webview.loadUrl(strategy.url, strategy.header.orEmpty()) },
                 )
                 if (r.isNotEmpty() || strategy.actionJs == null) {
                     val content = webview.getHtml().also {
@@ -158,13 +171,13 @@ class WebViewHelperV2Impl: WebViewHelperV2 {
                         r
                     )
                 }
-                webview.evaluateJavascript(strategy.actionJs)
                 r = try {
                     webview.waitUntil(
                         if (strategy.callBackRegex.isEmpty()) null else Regex(strategy.callBackRegex),
                         strategy.timeOut,
                         true,
-                        ignoreTimeoutExt = false
+                        ignoreTimeoutExt = false,
+                        onReady = { webview.evaluateJavascript(strategy.actionJs) },
                     )
                 } catch (e: CancellationException) {
                     recyclerWebView(webview)

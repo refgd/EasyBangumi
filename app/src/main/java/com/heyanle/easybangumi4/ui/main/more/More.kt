@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.HistoryToggleOff
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.Tag
@@ -36,6 +37,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.heyanle.easybangumi4.ABOUT
+import com.heyanle.easybangumi4.AI_HOME
 import com.heyanle.easybangumi4.LocalNavController
 import com.heyanle.easybangumi4.R
 import com.heyanle.easybangumi4.SOURCE_MANAGER
@@ -102,6 +104,20 @@ fun More() {
                 Icon(
                     Icons.Filled.Extension,
                     contentDescription = stringResource(id = com.heyanle.easy_i18n.R.string.source_manage)
+                )
+            }
+        )
+
+        ListItem(
+            modifier = Modifier.clickable {
+                nav.navigate(AI_HOME)
+            },
+            headlineContent = { Text(text = "AI 写源") },
+            supportingContent = { Text(text = "添加、更新和调试 JavaScript 番源") },
+            leadingContent = {
+                Icon(
+                    Icons.Filled.SmartToy,
+                    contentDescription = "AI 写源"
                 )
             }
         )

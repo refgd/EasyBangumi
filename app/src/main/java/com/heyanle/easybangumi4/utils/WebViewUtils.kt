@@ -55,7 +55,8 @@ suspend fun WebView.waitUntil(
     regex: Regex? = null,
     timeoutMs: Long = 8000L,
     stopLoading: Boolean = false,
-    ignoreTimeoutExt: Boolean = true
+    ignoreTimeoutExt: Boolean = true,
+    onReady: (() -> Unit)? = null,
 ): String {
     val res = withTimeoutOrNull(timeoutMs) {
         return@withTimeoutOrNull suspendCancellableCoroutine<String> { con ->
@@ -80,6 +81,7 @@ suspend fun WebView.waitUntil(
                     }
                 }
             }
+            onReady?.invoke()
         }
     }
         ?: if (ignoreTimeoutExt) {

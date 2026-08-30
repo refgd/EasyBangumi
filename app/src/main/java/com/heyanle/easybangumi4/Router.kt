@@ -25,6 +25,11 @@ import com.heyanle.easybangumi4.plugin.source.utils.network.WebViewHelperV2Impl
 import com.heyanle.easybangumi4.theme.NormalSystemBarColor
 import com.heyanle.easybangumi4.ui.WebViewUser
 import com.heyanle.easybangumi4.ui.about.About
+import com.heyanle.easybangumi4.ui.ai.AiChat
+import com.heyanle.easybangumi4.ui.ai.AiHome
+import com.heyanle.easybangumi4.ui.ai.AiModels
+import com.heyanle.easybangumi4.ui.ai.AiProxies
+import com.heyanle.easybangumi4.ui.ai.AiSkills
 import com.heyanle.easybangumi4.ui.cartoon_play.CartoonPlay
 import com.heyanle.easybangumi4.ui.cartoon_play.view_model.CartoonPlayViewModel
 import com.heyanle.easybangumi4.ui.dlna.Dlna
@@ -89,6 +94,16 @@ const val STORAGE = "storage"
 const val STORY = "story"
 
 const val EXTENSION_PUSH = "extension_push"
+
+const val AI_HOME = "ai_home"
+const val AI_CHAT = "ai_chat"
+const val AI_MODELS = "ai_models"
+const val AI_PROXIES = "ai_proxies"
+const val AI_SKILLS = "ai_skills"
+
+fun NavHostController.navigationAiChat(sessionId: String) {
+    navigate("$AI_CHAT/$sessionId")
+}
 
 fun NavHostController.navigationSearch(
     defSourceKey: String,
@@ -443,6 +458,34 @@ fun Nav() {
             composable(STORAGE) {
                 NormalSystemBarColor()
                 Storage()
+            }
+
+            composable(AI_HOME) {
+                NormalSystemBarColor()
+                AiHome()
+            }
+
+            composable(
+                "$AI_CHAT/{sessionId}",
+                arguments = listOf(navArgument("sessionId") { defaultValue = "" }),
+            ) {
+                NormalSystemBarColor()
+                AiChat(it.arguments?.getString("sessionId").orEmpty())
+            }
+
+            composable(AI_MODELS) {
+                NormalSystemBarColor()
+                AiModels()
+            }
+
+            composable(AI_PROXIES) {
+                NormalSystemBarColor()
+                AiProxies()
+            }
+
+            composable(AI_SKILLS) {
+                NormalSystemBarColor()
+                AiSkills()
             }
         }
     }
